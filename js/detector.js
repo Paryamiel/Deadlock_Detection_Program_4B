@@ -1,8 +1,13 @@
 /**
- * detector.js - Dual Deadlock Detection Engine
- * 1. Single-Instance Resources: Wait-For Graph (WFG) with Three-Color DFS cycle detection
- * 2. Multi-Instance Resources: Vector-Matrix Algorithm (Banker's reclamation variant)
- * Both algorithms provide synchronous execution and step-by-step playback traces.
+ * detector.js - Dual Deadlock Detection & Pre-Deadlock Predictive Engine
+ * 
+ * Supports:
+ * 1. DURING DEADLOCK (Active Detection):
+ *    - Single-Instance: Wait-For Graph (WFG) with Three-Color DFS cycle detection.
+ *    - Multi-Instance: Vector-Matrix reclamation algorithm.
+ * 2. PRIOR TO DEADLOCK (Predictive / Pre-Deadlock Detection):
+ *    - Evaluates tentative resource claims before they are granted.
+ *    - Categorizes system state into: SAFE, DEADLOCK RISK (Prior), or DEADLOCKED (During).
  */
 
 (function (root) {
@@ -20,11 +25,9 @@
      * Builds the Wait-For Graph (WFG) from the current state snapshot.
      * In single-instance resources, if P_j holds resource R_k and P_i requests R_k,
      * then a directed edge P_i -> P_j is formed (P_i waits for P_j).
-     * Works for multi-instance dependencies as well by mapping held resource claims.
      */
     buildWaitForGraph(snapshot) {
       const { processes, allocation, request, resourceNames } = snapshot;
-      const n = processes.length;
       const m = resourceNames.length;
 
       // Active process index mapping
@@ -42,7 +45,7 @@
 
       // Adjacency list: fromProcessIdx -> Set of toProcessIdx
       const adj = new Map();
-      const edgeDetails = []; // [{ fromId, toId, resourceName, fromName, toName }]
+      const edgeDetails = [];
 
       for (const idx of activeIndices) {
         adj.set(idx, new Set());
@@ -90,55 +93,28 @@
     }
 
     /**
-     * Generator for Single-Instance Three-Color DFS cycle detection
-     * Yields execution steps for interactive visual inspection
+     * Three-Color DFS cycle detection
      */
-    *stepSingleInstance(snapshot) {
+    detectSingleInstance(snapshot) {
       const { processes } = snapshot;
       const wfg = this.buildWaitForGraph(snapshot);
-      const { activeIndices, adj, edges, idToIndex, indexToId } = wfg;
+      const { activeIndices, adj, edges, idToIndex } = wfg;
 
       const colors = new Map();
-      const parent = new Map();
-      const callStack = []; // stores current recursion path [idx1, idx2, ...]
+      const callStack = [];
       const cycles = [];
       const deadlockedIds = new Set();
+      const steps = [];
 
       for (const idx of activeIndices) {
         colors.set(idx, this.WHITE);
-        parent.set(idx, null);
       }
 
-      yield {
-        type: 'INIT',
-        message: `Constructed Wait-For Graph with ${activeIndices.length} active nodes and ${edges.length} dependency edges.`,
-        wfg,
-        colors: new Map(colors),
-        callStack: [...callStack],
-        currentCycle: null,
-        cycles: []
-      };
-
-      // DFS function with step generation
       for (const startIdx of activeIndices) {
         if (colors.get(startIdx) === this.WHITE) {
-          // Recursive DFS implemented with generator steps
           const dfsStack = [{ node: startIdx, edgeIter: Array.from(adj.get(startIdx))[Symbol.iterator]() }];
           colors.set(startIdx, this.GRAY);
           callStack.push(startIdx);
-
-          yield {
-            type: 'ENTER_NODE',
-            nodeIdx: startIdx,
-            processId: processes[startIdx].id,
-            processName: processes[startIdx].name,
-            color: 'GRAY',
-            message: `Visiting ${processes[startIdx].name} (marked GRAY / exploring).`,
-            wfg,
-            colors: new Map(colors),
-            callStack: [...callStack],
-            cycles: [...cycles]
-          };
 
           while (dfsStack.length > 0) {
             const top = dfsStack[dfsStack.length - 1];
@@ -149,33 +125,16 @@
               const v = nextEdge.value;
               const vColor = colors.get(v);
 
-              yield {
-                type: 'CHECK_EDGE',
-                fromIdx: u,
-                toIdx: v,
-                fromName: processes[u].name,
-                toName: processes[v].name,
-                targetColor: vColor === this.WHITE ? 'WHITE' : vColor === this.GRAY ? 'GRAY' : 'BLACK',
-                message: `Checking edge: ${processes[u].name} \u2192 ${processes[v].name} (Target is ${vColor === this.WHITE ? 'WHITE' : vColor === this.GRAY ? 'GRAY' : 'BLACK'}).`,
-                wfg,
-                colors: new Map(colors),
-                callStack: [...callStack],
-                cycles: [...cycles]
-              };
-
               if (vColor === this.GRAY) {
-                // Back-edge found! We have a cycle!
-                const cycleNodes = [];
+                // Back-edge found! Cycle detected!
                 const cycleIds = [];
                 const stackIndex = callStack.indexOf(v);
 
                 if (stackIndex !== -1) {
                   for (let k = stackIndex; k < callStack.length; k++) {
-                    cycleNodes.push(callStack[k]);
                     cycleIds.push(processes[callStack[k]].id);
                     deadlockedIds.add(processes[callStack[k]].id);
                   }
-                  // Close the cycle loop
                   cycleIds.push(processes[v].id);
                 } else {
                   cycleIds.push(processes[u].id, processes[v].id);
@@ -183,128 +142,51 @@
                   deadlockedIds.add(processes[v].id);
                 }
 
-                // Check for duplicate cycle
                 const cycleKey = cycleIds.slice(0, -1).sort().join('-');
                 const isDuplicate = cycles.some(c => c.slice(0, -1).sort().join('-') === cycleKey);
                 if (!isDuplicate) {
                   cycles.push(cycleIds);
                 }
-
-                yield {
-                  type: 'CYCLE_DETECTED',
-                  fromIdx: u,
-                  toIdx: v,
-                  cycle: cycleIds,
-                  cycleString: cycleIds.map(id => processes[idToIndex.get(id)].name).join(' \u2192 '),
-                  message: `\u26A0\uFE0F DEADLOCK CYCLE FOUND: ${cycleIds.map(id => processes[idToIndex.get(id)].name).join(' \u2192 ')}!`,
-                  wfg,
-                  colors: new Map(colors),
-                  callStack: [...callStack],
-                  cycles: [...cycles]
-                };
               } else if (vColor === this.WHITE) {
-                // Explore unvisited neighbor
                 colors.set(v, this.GRAY);
                 callStack.push(v);
-                parent.set(v, u);
-
-                yield {
-                  type: 'ENTER_NODE',
-                  nodeIdx: v,
-                  processId: processes[v].id,
-                  processName: processes[v].name,
-                  color: 'GRAY',
-                  message: `Advancing to ${processes[v].name} (marked GRAY).`,
-                  wfg,
-                  colors: new Map(colors),
-                  callStack: [...callStack],
-                  cycles: [...cycles]
-                };
-
                 dfsStack.push({ node: v, edgeIter: Array.from(adj.get(v))[Symbol.iterator]() });
               }
             } else {
-              // Finished exploring all outgoing edges of u
               colors.set(u, this.BLACK);
               callStack.pop();
               dfsStack.pop();
-
-              yield {
-                type: 'FINISH_NODE',
-                nodeIdx: u,
-                processId: processes[u].id,
-                processName: processes[u].name,
-                color: 'BLACK',
-                message: `Fully explored ${processes[u].name} (marked BLACK / closed branch).`,
-                wfg,
-                colors: new Map(colors),
-                callStack: [...callStack],
-                cycles: [...cycles]
-              };
             }
           }
         }
       }
 
-      yield {
-        type: 'COMPLETE',
-        deadlockedIds: Array.from(deadlockedIds),
-        cycles,
-        message: deadlockedIds.size > 0
-          ? `DFS Finished: ${deadlockedIds.size} process(es) deadlocked in ${cycles.length} cycle(s).`
-          : 'DFS Finished: Graph is acyclic. No single-instance deadlock detected.',
-        wfg,
-        colors: new Map(colors),
-        callStack: []
-      };
-    }
-
-    /**
-     * Synchronous execution of Single-Instance Three-Color DFS
-     */
-    detectSingleInstance(snapshot) {
-      const steps = [];
-      const gen = this.stepSingleInstance(snapshot);
-      let result = gen.next();
-
-      while (!result.done) {
-        steps.push(result.value);
-        result = gen.next();
-      }
-
-      const lastStep = steps[steps.length - 1] || {};
       return {
         algorithm: 'single-instance-wfg',
-        isDeadlocked: (lastStep.deadlockedIds || []).length > 0,
-        deadlockedIds: lastStep.deadlockedIds || [],
-        cycles: lastStep.cycles || [],
-        wfg: lastStep.wfg || this.buildWaitForGraph(snapshot),
+        isDeadlocked: deadlockedIds.size > 0,
+        deadlockedIds: Array.from(deadlockedIds),
+        cycles,
+        wfg,
         steps
       };
     }
 
     /**
-     * Generator for Multi-Instance Vector-Matrix Deadlock Detection Algorithm
-     * Yields iteration steps for detailed walkthrough
+     * Multi-Instance Vector-Matrix Deadlock Detection Algorithm
      */
-    *stepMultiInstance(snapshot) {
+    detectMultiInstance(snapshot) {
       const { processes, available, allocation, request, resourceNames } = snapshot;
       const n = processes.length;
       const m = resourceNames.length;
 
-      // 1. Initialize Work vector
       const Work = [...available];
-
-      // 2. Initialize Finish vector: Finish[i] = true if Allocation_i == 0
       const Finish = new Array(n).fill(false);
-      const activeIndices = [];
 
       for (let i = 0; i < n; i++) {
         if (processes[i].status === 'TERMINATED') {
           Finish[i] = true;
           continue;
         }
-        activeIndices.push(i);
         const isZeroAlloc = allocation[i].every(val => val === 0);
         if (isZeroAlloc) {
           Finish[i] = true;
@@ -312,18 +194,6 @@
       }
 
       const safeSequence = [];
-      let round = 1;
-
-      yield {
-        type: 'INIT',
-        message: `Multi-Instance Algorithm initialized. Work = [${Work.join(', ')}]. Zero-allocation processes marked Finished.`,
-        Work: [...Work],
-        Finish: [...Finish],
-        safeSequence: [...safeSequence],
-        stepInfo: { round: 0, checkedIdx: null, passed: null }
-      };
-
-      // 3. Repeatedly find i such that Finish[i] == false and Request_i <= Work
       let foundInRound = true;
 
       while (foundInRound) {
@@ -331,55 +201,22 @@
 
         for (let i = 0; i < n; i++) {
           if (!Finish[i]) {
-            // Check if Request_i <= Work for all resources
             const req = request[i];
             const canSatisfy = req.every((rVal, rIdx) => rVal <= Work[rIdx]);
 
-            yield {
-              type: 'CHECK_PROCESS',
-              message: `Evaluating ${processes[i].name}: Request [${req.join(', ')}] \u2264 Work [${Work.join(', ')}] ? \u2192 ${canSatisfy ? 'YES \u2705' : 'NO \u274C'}`,
-              processIdx: i,
-              processId: processes[i].id,
-              processName: processes[i].name,
-              requestVec: [...req],
-              Work: [...Work],
-              Finish: [...Finish],
-              canSatisfy,
-              safeSequence: [...safeSequence]
-            };
-
             if (canSatisfy) {
-              // Simulate reclamation: Work = Work + Allocation_i
-              const oldWork = [...Work];
               for (let r = 0; r < m; r++) {
                 Work[r] += allocation[i][r];
               }
               Finish[i] = true;
               safeSequence.push(processes[i].id);
               foundInRound = true;
-
-              yield {
-                type: 'RECLAIM_RESOURCES',
-                message: `Reclaimed resources from ${processes[i].name}! Reclaimed: [${allocation[i].join(', ')}]. New Work: [${Work.join(', ')}].`,
-                processIdx: i,
-                processId: processes[i].id,
-                processName: processes[i].name,
-                allocatedVec: [...allocation[i]],
-                oldWork,
-                Work: [...Work],
-                Finish: [...Finish],
-                safeSequence: [...safeSequence]
-              };
-
-              // Restart search from beginning to simulate greedy progression
               break;
             }
           }
         }
-        round++;
       }
 
-      // 4. Any process with Finish[i] == false is deadlocked
       const deadlockedIds = [];
       for (let i = 0; i < n; i++) {
         if (!Finish[i] && processes[i].status !== 'TERMINATED') {
@@ -387,46 +224,18 @@
         }
       }
 
-      yield {
-        type: 'COMPLETE',
-        message: deadlockedIds.length > 0
-          ? `Algorithm completed: ${deadlockedIds.length} process(es) could not finish \u2192 Deadlock detected!`
-          : 'Algorithm completed: All processes finished successfully \u2192 System is SAFE.',
-        Work: [...Work],
-        Finish: [...Finish],
-        safeSequence: [...safeSequence],
-        deadlockedIds: [...deadlockedIds],
-        isDeadlocked: deadlockedIds.length > 0
-      };
-    }
-
-    /**
-     * Synchronous execution of Multi-Instance Vector-Matrix algorithm
-     */
-    detectMultiInstance(snapshot) {
-      const steps = [];
-      const gen = this.stepMultiInstance(snapshot);
-      let result = gen.next();
-
-      while (!result.done) {
-        steps.push(result.value);
-        result = gen.next();
-      }
-
-      const lastStep = steps[steps.length - 1] || {};
       return {
         algorithm: 'multi-instance-matrix',
-        isDeadlocked: (lastStep.deadlockedIds || []).length > 0,
-        deadlockedIds: lastStep.deadlockedIds || [],
-        finalWork: lastStep.Work || [...snapshot.available],
-        finish: lastStep.Finish || [],
-        safeSequence: lastStep.safeSequence || [],
-        steps
+        isDeadlocked: deadlockedIds.length > 0,
+        deadlockedIds,
+        finalWork: Work,
+        finish: Finish,
+        safeSequence
       };
     }
 
     /**
-     * Uniform detection runner that respects current mode ('single' or 'multi')
+     * Standard detection runner respecting mode
      */
     detect(snapshot) {
       if (snapshot.mode === 'single') {
@@ -434,6 +243,156 @@
       } else {
         return this.detectMultiInstance(snapshot);
       }
+    }
+
+    /**
+     * =========================================================================
+     * PRIOR TO DEADLOCK: PREDICTIVE DEADLOCK DETECTION & SAFETY EVALUATION
+     * =========================================================================
+     * Simulates granting a proposed resource request before it is committed.
+     * Tells the user whether granting it will result in a Deadlock (Unsafe)
+     * or remain completely Safe.
+     */
+    predictRequest(snapshot, processId, resourceIdx, amount) {
+      const pIdx = snapshot.processes.findIndex(p => p.id === processId);
+      if (pIdx === -1) {
+        return { valid: false, message: 'Invalid process selected.' };
+      }
+
+      const requestedAmt = Math.max(1, parseInt(amount, 10) || 1);
+      const resName = snapshot.resourceNames[resourceIdx] || `R${resourceIdx}`;
+      const procName = snapshot.processes[pIdx].name;
+
+      // 1. Check if the system has enough available resources right now
+      const currentlyAvail = snapshot.available[resourceIdx] || 0;
+      if (requestedAmt > currentlyAvail) {
+        return {
+          valid: true,
+          immediateGrantPossible: false,
+          causesDeadlock: true,
+          stateType: 'IMMEDIATELY_BLOCKED',
+          message: `⚠️ PRIOR WARNING: Request of ${requestedAmt} × ${resName} by ${procName} exceeds Available (${currentlyAvail}). Process would immediately block.`,
+          deadlockedIds: [processId],
+          cycles: []
+        };
+      }
+
+      // 2. Clone state and tentatively simulate granting the request
+      const trialSnapshot = {
+        resourceNames: [...snapshot.resourceNames],
+        available: [...snapshot.available],
+        allocation: snapshot.allocation.map(r => [...r]),
+        request: snapshot.request.map(r => [...r]),
+        processes: snapshot.processes.map(p => ({ ...p })),
+        mode: snapshot.mode
+      };
+
+      // Tentatively allocate to process
+      trialSnapshot.available[resourceIdx] -= requestedAmt;
+      trialSnapshot.allocation[pIdx][resourceIdx] += requestedAmt;
+      trialSnapshot.request[pIdx][resourceIdx] = Math.max(0, trialSnapshot.request[pIdx][resourceIdx] - requestedAmt);
+
+      // Run detection on the simulated post-grant state
+      const detectionResult = this.detect(trialSnapshot);
+
+      if (detectionResult.isDeadlocked) {
+        const cycleStr = (detectionResult.cycles && detectionResult.cycles.length > 0)
+          ? detectionResult.cycles[0].map(id => {
+              const p = trialSnapshot.processes.find(pr => pr.id === id);
+              return p ? p.name : `P${id}`;
+            }).join(' → ')
+          : detectionResult.deadlockedIds.map(id => `P${id}`).join(', ');
+
+        return {
+          valid: true,
+          immediateGrantPossible: true,
+          causesDeadlock: true,
+          stateType: 'DEADLOCK_IMMINENT',
+          deadlockedIds: detectionResult.deadlockedIds,
+          cycles: detectionResult.cycles,
+          message: `🚨 PRE-DEADLOCK DETECTED (PRIOR): If you grant ${requestedAmt} × ${resName} to ${procName}, the system enters an UNSAFE state that triggers an active deadlock cycle: [${cycleStr}]!`,
+          safeSequence: []
+        };
+      } else {
+        const seqNames = (detectionResult.safeSequence || []).map(id => {
+          const p = trialSnapshot.processes.find(pr => pr.id === id);
+          return p ? p.name : `P${id}`;
+        }).join(' → ');
+
+        return {
+          valid: true,
+          immediateGrantPossible: true,
+          causesDeadlock: false,
+          stateType: 'SAFE_TO_GRANT',
+          deadlockedIds: [],
+          cycles: [],
+          message: `✅ SAFE TO GRANT (PRIOR): Granting ${requestedAmt} × ${resName} to ${procName} is completely safe. Guaranteed safe execution sequence: [${seqNames || 'All Processes'}].`,
+          safeSequence: detectionResult.safeSequence || []
+        };
+      }
+    }
+
+    /**
+     * Comprehensive System State Assessment:
+     * Returns:
+     * - 'SAFE': Normal running system, all processes finishable.
+     * - 'RISK' (Prior to deadlock): Processes blocked on limited resources, warning state.
+     * - 'DEADLOCKED' (During deadlock): Active cycle or permanent block confirmed.
+     */
+    assessSystemState(snapshot) {
+      const activeDetection = this.detect(snapshot);
+
+      if (activeDetection.isDeadlocked) {
+        return {
+          phase: 'DURING',
+          status: 'DEADLOCKED',
+          badgeClass: 'badge-danger',
+          badgeText: 'DEADLOCK ACTIVE (DURING)',
+          headline: `🚨 Deadlock Confirmed (${activeDetection.deadlockedIds.length} processes trapped)`,
+          details: activeDetection.cycles && activeDetection.cycles.length > 0
+            ? `Active circular wait: ${activeDetection.cycles.map(c => c.map(id => `P${id}`).join(' → ')).join(' | ')}`
+            : `Blocked processes: ${activeDetection.deadlockedIds.map(id => `P${id}`).join(', ')} cannot obtain needed resources.`,
+          deadlockedIds: activeDetection.deadlockedIds,
+          cycles: activeDetection.cycles
+        };
+      }
+
+      // Check if any process has unsatisfied requests (pre-deadlock risk / prior warning)
+      const { processes, request, available } = snapshot;
+      const waitingProcs = [];
+
+      processes.forEach((p, pIdx) => {
+        if (p.status !== 'TERMINATED') {
+          const hasOverClaim = request[pIdx].some((rVal, rIdx) => rVal > available[rIdx]);
+          if (hasOverClaim) {
+            waitingProcs.push(p.name);
+          }
+        }
+      });
+
+      if (waitingProcs.length > 0) {
+        return {
+          phase: 'PRIOR',
+          status: 'RISK',
+          badgeClass: 'badge-warning',
+          badgeText: 'DEADLOCK RISK (PRIOR)',
+          headline: `⚠️ Pre-Deadlock Warning: ${waitingProcs.join(', ')} currently blocked`,
+          details: `System is in a sensitive state. Further uncoordinated resource allocations could lock the system.`,
+          deadlockedIds: [],
+          cycles: []
+        };
+      }
+
+      return {
+        phase: 'SAFE',
+        status: 'SAFE',
+        badgeClass: 'badge-success',
+        badgeText: 'SAFE STATE',
+        headline: `✅ System is in a Stable Safe State`,
+        details: `All processes can proceed to completion. No circular wait detected.`,
+        deadlockedIds: [],
+        cycles: []
+      };
     }
   }
 
