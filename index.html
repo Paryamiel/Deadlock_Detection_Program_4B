@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Interactive Deadlock Detection and Recovery Simulator demonstrating Single-Instance Wait-For Graph (DFS cycles), Multi-Instance Vector-Matrix algorithms, and starvation-resistant heuristic victim recovery.">
+  <title>Deadlock Detection &amp; Recovery Simulator</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-icon" aria-hidden="true">⚡</div>
+      <div class="brand-title-wrap">
+        <h1>Deadlock Detection &amp; Recovery Simulator</h1>
+        <div class="brand-subtitle">
+          <span>OS Concurrency Lab</span>
+          <span>•</span>
+          <span>Single-Instance WFG &amp; Multi-Instance Matrix</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-status-group">
+      <div class="metrics-strip">
+        <div class="metric-item">
+          <span class="metric-label">Active:</span>
+          <span class="metric-value" id="metric-active-count">3</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Deadlocked:</span>
+          <span class="metric-value" id="metric-deadlocked-count">0</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Cycles:</span>
+          <span class="metric-value" id="metric-cycles-count">0</span>
+        </div>
+      </div>
+
+      <div class="status-badge badge-success" id="system-status-badge">
+        <span class="dot"></span> SAFE STATE
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Dashboard -->
+  <main class="dashboard-container">
+    <!-- Top Control Bar -->
+    <section class="control-bar" aria-label="Simulation Controls">
+      <!-- Algorithm Selector -->
+      <div class="control-group">
+        <label for="select-algorithm-mode" class="control-label">Algorithm:</label>
+        <select id="select-algorithm-mode" class="custom-select" aria-label="Select Detection Algorithm">
+          <option value="single">Single-Instance (WFG DFS Cycle)</option>
+          <option value="multi">Multi-Instance (Vector-Matrix Algorithm)</option>
+        </select>
+      </div>
+
+      <!-- Trigger Mode Radio Group -->
+      <div class="control-group">
+        <span class="control-label">Trigger:</span>
+        <div class="segmented-group" role="radiogroup" aria-label="Detection Trigger Mode">
+          <label>
+            <input type="radio" name="trigger-mode" value="timer" checked id="trigger-mode-timer">
+            <span>Periodic Timer</span>
+          </label>
+          <label>
+            <input type="radio" name="trigger-mode" value="on-request" id="trigger-mode-on-request">
+            <span>On-Request Block</span>
+          </label>
+          <label>
+            <input type="radio" name="trigger-mode" value="manual" id="trigger-mode-manual">
+            <span>Manual Step</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Timer Controls Group -->
+      <div class="control-group" id="timer-controls-group">
+        <div class="slider-wrap">
+          <label for="slider-timer-speed" class="control-label">Interval:</label>
+          <input type="range" id="slider-timer-speed" min="500" max="5000" step="250" value="2000" aria-label="Timer Interval Speed">
+          <span class="slider-val-badge" id="label-timer-speed">2000ms</span>
+        </div>
+        <button type="button" class="btn" id="btn-toggle-timer" title="Toggle Background Periodic Timer">
+          <span class="icon">⏸</span> Pause Timer
+        </button>
+      </div>
+
+      <!-- Step-by-Step Controls Group (displayed when in manual mode) -->
+      <div class="control-group" id="step-controls-group" style="display: none;">
+        <button type="button" class="btn btn-primary" id="btn-step-init" title="Restart Algorithmic Walkthrough">
+          <span class="icon">🔄</span> Reset Steps
+        </button>
+        <button type="button" class="btn" id="btn-step-backward" title="Step Back in History">
+          <span class="icon">⏮</span> Prev
+        </button>
+        <button type="button" class="btn btn-primary" id="btn-step-forward" title="Advance Next Step">
+          <span class="icon">⏭</span> Next Step
+        </button>
+        <button type="button" class="btn" id="btn-step-autoplay" title="Auto-Play Step Walkthrough">
+          <span class="icon">▶</span> Auto-Play Steps
+        </button>
+        <span class="slider-val-badge" id="step-counter-label">Step 0</span>
+      </div>
+
+      <!-- Presets & Run Action -->
+      <div class="control-group">
+        <button type="button" class="btn btn-primary" id="btn-run-detection" title="Run Deadlock Detection Immediately">
+          <span class="icon">🔍</span> Detect Now
+        </button>
+      </div>
+    </section>
+
+    <!-- Presets Quick Bar -->
+    <section class="control-bar" style="padding: 0.65rem 1.25rem;" aria-label="Preset Scenarios">
+      <div class="presets-strip">
+        <span class="control-label">Scenarios:</span>
+        <button type="button" class="btn" id="btn-preset-1" title="Load Preset 1: Single-Instance 3-Node Cycle">
+          <span>Preset 1:</span> Classic 3-Node Cycle (P0→P1→P2→P0)
+        </button>
+        <button type="button" class="btn" id="btn-preset-2" title="Load Preset 2: Banker's 5-Process Multi-Instance Deadlock">
+          <span>Preset 2:</span> Banker's 5-Process Multi-Instance
+        </button>
+        <button type="button" class="btn" id="btn-preset-3" title="Load Preset 3: Starvation Prevention Demonstration">
+          <span>Preset 3:</span> Starvation Prevention Demo
+        </button>
+      </div>
+
+      <div class="control-group">
+        <button type="button" class="btn" id="btn-add-process" title="Add New Process Node">
+          <span class="icon">➕</span> Add Process
+        </button>
+        <button type="button" class="btn" id="btn-add-resource" title="Add New Resource Type">
+          <span class="icon">📦</span> Add Resource
+        </button>
+        <button type="button" class="btn" id="btn-undo" title="Undo Last Mutation">
+          <span class="icon">↩</span> Undo
+        </button>
+      </div>
+    </section>
+
+    <!-- Two-Column Primary Layout -->
+    <div class="dashboard-grid">
+      <!-- Left Column: Wait-For Graph Canvas & Algorithm Inspector -->
+      <section class="dashboard-panel" aria-label="Wait-For Graph Visualizer">
+        <div class="panel-header">
+          <h3><span class="icon">🕸</span> Interactive Wait-For Graph</h3>
+          <div class="panel-actions">
+            <span class="badge badge-info">Draggable Nodes</span>
+          </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="canvas-wrapper">
+          <canvas id="wfg-canvas" width="650" height="420" aria-label="Interactive Wait-For Graph Canvas"></canvas>
+          <div class="canvas-floating-info">
+            <div class="canvas-hint">Drag nodes to rearrange • Hover for cost breakdown • Crimson pulses indicate cycles</div>
+          </div>
+        </div>
+
+        <!-- Inspection / Vector Status Panel -->
+        <div class="inspection-panel">
+          <div class="panel-header" style="background: transparent; padding: 0 0 0.5rem 0; border-bottom: 1px solid var(--border-color);">
+            <h4 style="font-size: 0.85rem; font-weight: 700; color: #38bdf8;">
+              <span class="icon">🔬</span> Algorithmic State Inspector
+            </h4>
+          </div>
+          <div id="inspection-panel-body">
+            <!-- Dynamically populated by renderer -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Matrix State Grids & Recovery Interface -->
+      <section class="dashboard-panel" aria-label="Matrix State Grid and Recovery">
+        <div class="panel-header">
+          <h3><span class="icon">📊</span> Matrix State Grid</h3>
+          <div class="panel-actions">
+            <span class="badge badge-emerald">Live Editable Cells</span>
+          </div>
+        </div>
+
+        <!-- Matrix Grids Container (Available, Allocation, Request) -->
+        <div class="matrices-section" id="matrix-grids-container">
+          <!-- Dynamically populated by renderer -->
+        </div>
+
+        <!-- Automated Recovery Panel -->
+        <div class="recovery-panel">
+          <div class="recovery-formula-box">
+            <div class="formula-title">
+              <span>⚖️ Starvation-Resistant Victim Cost Function:</span>
+            </div>
+            <div class="formula-code">
+              Cost = ((Allocated × 1.5) + (Time × 1.0)) / ((Priority × 2.0) + (Rollback × 3.0) + ε)
+            </div>
+            <div style="font-size: 0.725rem; color: #94a3b8;">
+              Rollback count increases survival protection in subsequent recovery rounds to prevent starvation.
+            </div>
+          </div>
+
+          <div class="recovery-actions">
+            <button type="button" class="btn btn-danger" id="btn-recover-terminate" title="Abort lowest-cost victim and restore resources">
+              <span class="icon">🛑</span> Progressive Termination
+            </button>
+            <button type="button" class="btn btn-warning" id="btn-recover-rollback" title="Preempt contested resources and increment victim rollbackCount">
+              <span class="icon">⏪</span> Preempt &amp; Rollback
+            </button>
+            <button type="button" class="btn btn-purple" id="btn-recover-all" title="Automatically recover all deadlocked processes">
+              <span class="icon">⚡</span> Auto-Resolve All
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Bottom Row: Terminal Diagnostics Log -->
+    <section class="diagnostics-panel" aria-label="Execution Diagnostics Log">
+      <div class="terminal-header">
+        <div class="terminal-title">
+          <span class="status-dot"></span>
+          <span>EXECUTION DIAGNOSTICS LOG</span>
+        </div>
+
+        <div class="terminal-filters">
+          <button type="button" class="log-filter-btn active" data-filter="ALL" id="filter-all">ALL</button>
+          <button type="button" class="log-filter-btn" data-filter="TRIGGER" id="filter-trigger">TRIGGERS</button>
+          <button type="button" class="log-filter-btn" data-filter="CYCLE" id="filter-cycle">CYCLES</button>
+          <button type="button" class="log-filter-btn" data-filter="RECOVERY" id="filter-recovery">RECOVERY</button>
+        </div>
+
+        <div class="panel-actions">
+          <button type="button" class="btn" id="btn-export-logs" title="Export logs as text file" style="padding: 0.25rem 0.55rem; font-size: 0.725rem;">
+            <span>📥 Export Log</span>
+          </button>
+          <button type="button" class="btn" id="btn-clear-logs" title="Clear terminal stream" style="padding: 0.25rem 0.55rem; font-size: 0.725rem;">
+            <span>🗑 Clear</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="terminal-stream" id="diagnostics-log-stream" role="log" aria-live="polite">
+        <!-- Live streamed log items -->
+      </div>
+    </section>
+  </main>
+
+  <!-- App Footer -->
+  <footer class="app-footer">
+    <div>
+      <strong>Deadlock Detection &amp; Recovery Simulator</strong> • GitHub Pages Zero-Config Client Application
+    </div>
+    <div class="footer-links">
+      <span class="footer-link">Single-Instance WFG (Three-Color DFS)</span>
+      <span>•</span>
+      <span class="footer-link">Multi-Instance Banker's Reclamation</span>
+      <span>•</span>
+      <span class="footer-link">Heuristic Victim Rollback</span>
+    </div>
+  </footer>
+
+  <!-- Core Architectural Modules in Order -->
+  <script src="js/state.js"></script>
+  <script src="js/detector.js"></script>
+  <script src="js/recovery.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
