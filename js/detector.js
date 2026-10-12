@@ -310,7 +310,7 @@
           stateType: 'DEADLOCK_IMMINENT',
           deadlockedIds: detectionResult.deadlockedIds,
           cycles: detectionResult.cycles,
-          message: `🚨 PRE-DEADLOCK DETECTED (PRIOR): If you grant ${requestedAmt} × ${resName} to ${procName}, the system enters an UNSAFE state that triggers an active deadlock cycle: [${cycleStr}]!`,
+          message: `PRE-DEADLOCK DETECTED (PRIOR TO GRANT): Granting ${requestedAmt} × ${resName} to ${procName} places the system in an unsafe state that triggers active circular wait: [${cycleStr}].`,
           safeSequence: []
         };
       } else {
@@ -326,7 +326,7 @@
           stateType: 'SAFE_TO_GRANT',
           deadlockedIds: [],
           cycles: [],
-          message: `✅ SAFE TO GRANT (PRIOR): Granting ${requestedAmt} × ${resName} to ${procName} is completely safe. Guaranteed safe execution sequence: [${seqNames || 'All Processes'}].`,
+          message: `SAFE TO GRANT (HYPOTHESIS VALIDATED): Approving ${requestedAmt} × ${resName} for ${procName} preserves system schedulability. Verified safe sequence: [${seqNames || 'All Processes'}].`,
           safeSequence: detectionResult.safeSequence || []
         };
       }
@@ -348,9 +348,9 @@
           status: 'DEADLOCKED',
           badgeClass: 'badge-danger',
           badgeText: 'DEADLOCK ACTIVE (DURING)',
-          headline: `🚨 Deadlock Confirmed (${activeDetection.deadlockedIds.length} processes trapped)`,
+          headline: `Deadlock Confirmed (${activeDetection.deadlockedIds.length} processes in circular wait)`,
           details: activeDetection.cycles && activeDetection.cycles.length > 0
-            ? `Active circular wait: ${activeDetection.cycles.map(c => c.map(id => `P${id}`).join(' → ')).join(' | ')}`
+            ? `Active circular wait cycle: ${activeDetection.cycles.map(c => c.map(id => `P${id}`).join(' → ')).join(' | ')}.`
             : `Blocked processes: ${activeDetection.deadlockedIds.map(id => `P${id}`).join(', ')} cannot obtain needed resources.`,
           deadlockedIds: activeDetection.deadlockedIds,
           cycles: activeDetection.cycles
@@ -376,8 +376,8 @@
           status: 'RISK',
           badgeClass: 'badge-warning',
           badgeText: 'DEADLOCK RISK (PRIOR)',
-          headline: `⚠️ Pre-Deadlock Warning: ${waitingProcs.join(', ')} currently blocked`,
-          details: `System is in a sensitive state. Further uncoordinated resource allocations could lock the system.`,
+          headline: `Pre-Deadlock Warning: ${waitingProcs.join(', ')} currently pending`,
+          details: `System capacity is constrained. Additional uncoordinated allocations will induce circular wait.`,
           deadlockedIds: [],
           cycles: []
         };
@@ -387,9 +387,9 @@
         phase: 'SAFE',
         status: 'SAFE',
         badgeClass: 'badge-success',
-        badgeText: 'SAFE STATE',
-        headline: `✅ System is in a Stable Safe State`,
-        details: `All processes can proceed to completion. No circular wait detected.`,
+        badgeText: 'SAFE CONCURRENCY STATE',
+        headline: `System is in a Stable Safe State`,
+        details: `All processes can proceed to completion. No circular dependency exists.`,
         deadlockedIds: [],
         cycles: []
       };

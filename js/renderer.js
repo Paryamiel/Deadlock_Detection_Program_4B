@@ -1,13 +1,15 @@
 /**
- * renderer.js - Simplified, Beginner-Friendly Visual Graph & Matrix Renderer
+ * renderer.js - Academic & Formal Visual Graph & Matrix Renderer
  * 
  * Provides:
- * 1. Clean, readable Canvas Wait-For Graph with big nodes, animated arrows, and cycle highlighting.
- * 2. Plain-English status banners clearly distinguishing:
- *    - SAFE STATE
- *    - PRIOR TO DEADLOCK (Risk Warning)
- *    - DURING DEADLOCK (Active Circular Wait)
- * 3. Intuitive table grids for processes, holding, requesting, and available resources.
+ * 1. Clean, publication-quality Canvas Wait-For Graph with formal node topologies,
+ *    directional dependency vectors, and distinct cycle path identification.
+ * 2. Formal academic state assessment banners distinguishing:
+ *    - SAFE CONCURRENCY STATE
+ *    - PRE-ALLOCATION DEADLOCK RISK (Hypothesis Verification)
+ *    - ACTIVE DEADLOCK STATE (Circular Wait Confirmed)
+ * 3. Booktabs-styled scientific tables for processes, allocated vectors,
+ *    pending claim matrices, and available system capacity.
  */
 
 (function (root) {
@@ -26,16 +28,17 @@
       this.animTime = 0;
       this.animId = null;
 
+      // Formal Academic Palette (High Contrast, Publication Quality)
       this.theme = {
-        bg: '#0f172a',
-        gridLine: 'rgba(255, 255, 255, 0.04)',
-        nodeReady: '#10b981',      // Emerald
-        nodeWaiting: '#f59e0b',    // Amber
-        nodeDeadlocked: '#f43f5e', // Crimson
+        bg: '#ffffff',
+        gridLine: '#eef2f6',
+        nodeReady: '#15803d',      // Academic Forest Green
+        nodeWaiting: '#b45309',    // Academic Warm Amber
+        nodeDeadlocked: '#991b1b', // Academic Crimson / Carmine
         nodeTerminated: '#64748b', // Slate
-        edgeNormal: 'rgba(56, 189, 248, 0.6)',
-        edgeCycle: '#f43f5e',
-        edgeCycleGlow: 'rgba(244, 63, 94, 0.7)'
+        edgeNormal: '#334155',     // Ink / Slate
+        edgeCycle: '#991b1b',      // Academic Crimson
+        edgeCycleGlow: 'rgba(153, 27, 27, 0.25)'
       };
     }
 
@@ -203,7 +206,7 @@
         this.drawDirectedEdge(ctx, fromNode, toNode, edge.resourceName, isCycleEdge);
       });
 
-      // Draw processes as large, clear circular nodes
+      // Draw processes as large, clear formal circular nodes
       state.processes.forEach(proc => {
         const isDeadlocked = state.deadlockedProcessIds.includes(proc.id);
         const isHovered = this.hoveredNode && this.hoveredNode.id === proc.id;
@@ -219,6 +222,9 @@
     drawBackgroundGrid(ctx, w, h) {
       const step = 32;
       ctx.save();
+      ctx.fillStyle = this.theme.bg;
+      ctx.fillRect(0, 0, w, h);
+
       ctx.strokeStyle = this.theme.gridLine;
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -229,6 +235,12 @@
         ctx.moveTo(0, y); ctx.lineTo(w, y);
       }
       ctx.stroke();
+
+      // Subtle architectural frame around the canvas
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+
       ctx.restore();
     }
 
@@ -254,17 +266,14 @@
       ctx.save();
 
       if (isCycleEdge) {
-        const pulse = (Math.sin(this.animTime * 3) + 1) * 0.5;
         ctx.strokeStyle = this.theme.edgeCycle;
-        ctx.lineWidth = 3.5;
-        ctx.shadowColor = this.theme.edgeCycleGlow;
-        ctx.shadowBlur = 12 + pulse * 10;
-        ctx.setLineDash([8, 4]);
-        ctx.lineDashOffset = -this.animTime * 18;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([7, 4]);
+        ctx.lineDashOffset = -this.animTime * 14;
       } else {
         ctx.strokeStyle = this.theme.edgeNormal;
-        ctx.lineWidth = 2.5;
-        ctx.shadowBlur = 0;
+        ctx.lineWidth = 1.75;
+        ctx.setLineDash([]);
       }
 
       ctx.beginPath();
@@ -273,11 +282,11 @@
       ctx.stroke();
 
       // Arrow head
-      const arrowLen = isCycleEdge ? 12 : 10;
+      const arrowLen = isCycleEdge ? 11 : 9;
       const angle = Math.atan2(endY - my, endX - mx);
 
       ctx.setLineDash([]);
-      ctx.fillStyle = isCycleEdge ? this.theme.edgeCycle : '#38bdf8';
+      ctx.fillStyle = isCycleEdge ? this.theme.edgeCycle : this.theme.edgeNormal;
       ctx.beginPath();
       ctx.moveTo(endX, endY);
       ctx.lineTo(
@@ -291,21 +300,23 @@
       ctx.closePath();
       ctx.fill();
 
-      // Label
+      // Label plaque
       if (label) {
-        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.font = '600 11px "JetBrains Mono", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const metrics = ctx.measureText(`waits: ${label}`);
+        const labelText = `waits: ${label}`;
+        const metrics = ctx.measureText(labelText);
         const padX = 6, padY = 3;
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fillStyle = '#ffffff';
         ctx.fillRect(mx - metrics.width / 2 - padX, my - 7 - padY, metrics.width + padX * 2, 14 + padY * 2);
-        ctx.strokeStyle = isCycleEdge ? '#f43f5e' : '#38bdf8';
+        ctx.strokeStyle = isCycleEdge ? '#991b1b' : '#cbd5e1';
+        ctx.lineWidth = 1;
         ctx.strokeRect(mx - metrics.width / 2 - padX, my - 7 - padY, metrics.width + padX * 2, 14 + padY * 2);
 
-        ctx.fillStyle = isCycleEdge ? '#fecdd3' : '#bae6fd';
-        ctx.fillText(`waits: ${label}`, mx, my);
+        ctx.fillStyle = isCycleEdge ? '#991b1b' : '#1e293b';
+        ctx.fillText(labelText, mx, my);
       }
 
       ctx.restore();
@@ -318,53 +329,54 @@
 
       ctx.save();
 
-      // Glow on cycle nodes
+      // Formal concentric indicator for deadlocked node
       if (isDeadlocked) {
-        const pulse = (Math.sin(this.animTime * 4) + 1) * 0.5;
-        const glowRadius = radius + 10 + pulse * 8;
-        const grad = ctx.createRadialGradient(x, y, radius, x, y, glowRadius);
-        grad.addColorStop(0, 'rgba(244, 63, 94, 0.6)');
-        grad.addColorStop(1, 'rgba(244, 63, 94, 0)');
-        ctx.fillStyle = grad;
+        const pulse = (Math.sin(this.animTime * 3) + 1) * 0.5;
+        ctx.strokeStyle = 'rgba(153, 27, 27, ' + (0.4 + pulse * 0.5) + ')';
+        ctx.lineWidth = 1.75;
+        ctx.setLineDash([5, 3]);
         ctx.beginPath();
-        ctx.arc(x, y, glowRadius, 0, 2 * Math.PI);
-        ctx.fill();
+        ctx.arc(x, y, radius + 5, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
 
-      // Main circular body
-      const grad = ctx.createRadialGradient(x - 6, y - 6, 3, x, y, radius);
+      // Academic formal node fill & borders
+      let fillColor = '#f0fdf4'; // Normal ready
+      let strokeColor = '#15803d';
+      let statusTextColor = '#166534';
+
       if (isDeadlocked) {
-        grad.addColorStop(0, '#f43f5e');
-        grad.addColorStop(1, '#9f1239');
+        fillColor = '#fef2f2';
+        strokeColor = '#991b1b';
+        statusTextColor = '#991b1b';
       } else if (proc.status === 'WAITING') {
-        grad.addColorStop(0, '#fbbf24');
-        grad.addColorStop(1, '#b45309');
-      } else {
-        grad.addColorStop(0, '#34d399');
-        grad.addColorStop(1, '#065f46');
+        fillColor = '#fffbeb';
+        strokeColor = '#b45309';
+        statusTextColor = '#b45309';
       }
 
-      ctx.fillStyle = grad;
+      ctx.fillStyle = fillColor;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, 2 * Math.PI);
       ctx.fill();
 
-      // Outer ring
-      ctx.strokeStyle = isDeadlocked ? '#ffe4e6' : isHovered ? '#38bdf8' : 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = isDeadlocked || isHovered ? 3 : 2;
+      // Outer formal border ring
+      ctx.strokeStyle = isHovered ? '#1e3a8a' : strokeColor;
+      ctx.lineWidth = isHovered ? 3 : 2;
       ctx.stroke();
 
-      // Text inside node
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 14px Inter, sans-serif';
+      // Process Identifier
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 15px "Inter", -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(proc.name, x, y - 4);
 
-      // Status sub-label
-      ctx.font = '8px "JetBrains Mono", monospace';
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.fillText(isDeadlocked ? 'DEADLOCKED' : proc.status, x, y + 12);
+      // Status Sub-label
+      ctx.font = '700 8px "JetBrains Mono", monospace';
+      ctx.fillStyle = statusTextColor;
+      ctx.fillText(isDeadlocked ? 'DEADLOCKED' : proc.status, x, y + 11);
 
       ctx.restore();
     }
@@ -378,20 +390,20 @@
       const isDeadlocked = state.deadlockedProcessIds.includes(proc.id);
 
       const lines = [
-        `${proc.name} (${isDeadlocked ? 'DEADLOCKED' : proc.status})`,
-        `Holding: [${alloc.join(', ')}]`,
-        `Needs: [${req.join(', ')}]`,
-        `Drag node to reposition`
+        `${proc.name} [${isDeadlocked ? 'DEADLOCKED' : proc.status}]`,
+        `Holding Vector: [${alloc.join(', ')}]`,
+        `Pending Claim: [${req.join(', ')}]`,
+        `Drag node to adjust topology`
       ];
 
-      ctx.font = '11px Inter, sans-serif';
+      ctx.font = '11px "Inter", sans-serif';
       let maxW = 0;
       lines.forEach(l => {
         const w = ctx.measureText(l).width;
         if (w > maxW) maxW = w;
       });
 
-      const pad = 8;
+      const pad = 9;
       const boxW = maxW + pad * 2;
       const boxH = lines.length * 16 + pad * 2;
       let tx = proc.x + 35;
@@ -402,17 +414,19 @@
       if (ty < 10) ty = 10;
 
       ctx.save();
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
-      ctx.strokeStyle = isDeadlocked ? '#f43f5e' : '#38bdf8';
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isDeadlocked ? '#991b1b' : '#94a3b8';
+      ctx.lineWidth = 1.25;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+      ctx.shadowBlur = 8;
       ctx.beginPath();
       ctx.rect(tx, ty, boxW, boxH);
       ctx.fill();
       ctx.stroke();
 
       lines.forEach((line, i) => {
-        ctx.fillStyle = i === 0 ? (isDeadlocked ? '#fda4af' : '#7dd3fc') : '#e2e8f0';
-        ctx.font = i === 0 ? 'bold 12px Inter, sans-serif' : '10px "JetBrains Mono", monospace';
+        ctx.fillStyle = i === 0 ? (isDeadlocked ? '#991b1b' : '#0f294a') : '#334155';
+        ctx.font = i === 0 ? 'bold 12px "Inter", sans-serif' : '10px "JetBrains Mono", monospace';
         ctx.textAlign = 'left';
         ctx.fillText(line, tx + pad, ty + pad + 12 + i * 16);
       });
@@ -479,7 +493,7 @@
         <div class="simple-table-container">
           <!-- Available System Resources Strip -->
           <div class="available-strip">
-            <span class="strip-label">📦 Free Available Resources:</span>
+            <span class="strip-label">Available Capacity Vector (V<sub>avail</sub>):</span>
             <div class="available-items">
               ${resourceNames.map((r, rIdx) => `
                 <div class="avail-box">
@@ -497,10 +511,10 @@
             <table class="simple-grid-table">
               <thead>
                 <tr>
-                  <th>Process</th>
-                  <th>Status</th>
-                  <th>Holding (Allocated)</th>
-                  <th>Waiting For (Requested)</th>
+                  <th>Process Identifier</th>
+                  <th>Operational State</th>
+                  <th>Allocated Vector (Held)</th>
+                  <th>Pending Claim (Required)</th>
                 </tr>
               </thead>
               <tbody>

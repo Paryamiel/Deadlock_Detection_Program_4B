@@ -177,26 +177,26 @@
       if (prediction.causesDeadlock) {
         resultBox.className = 'prediction-result-box result-deadlock';
         resultBox.innerHTML = `
-          <strong>🚨 PRE-DEADLOCK DETECTED (PRIOR TO ALLOCATION):</strong>
+          <strong>PRE-DEADLOCK DETECTED (PRIOR TO ALLOCATION):</strong>
           <p>${prediction.message}</p>
-          <small>Recommendation: Do NOT grant this request. System should wait until resources are released to prevent deadlock.</small>
+          <small>Recommendation: Reject or defer allocation. Deferring claim preserves schedulability and prevents deadlock cycle.</small>
         `;
         if (applyBtn) {
           applyBtn.style.display = 'inline-flex';
-          applyBtn.textContent = '⚠️ Force Grant Anyway (Trigger Deadlock)';
+          applyBtn.textContent = 'Force Allocation (Induce Deadlock)';
           applyBtn.className = 'btn btn-danger';
         }
         this.log('PRIOR: PRE-DEADLOCK WARNING', prediction.message);
       } else {
         resultBox.className = 'prediction-result-box result-safe';
         resultBox.innerHTML = `
-          <strong>✅ SAFE TO GRANT (PRIOR TO ALLOCATION):</strong>
+          <strong>SAFE TO GRANT (PRIOR TO ALLOCATION):</strong>
           <p>${prediction.message}</p>
-          <small>Recommendation: Safe to approve. Granting this will NOT cause a deadlock.</small>
+          <small>Recommendation: Allocation approved. State remains fully schedulable with guaranteed completion order.</small>
         `;
         if (applyBtn) {
           applyBtn.style.display = 'inline-flex';
-          applyBtn.textContent = '✅ Grant Request (Safe)';
+          applyBtn.textContent = 'Commit Allocation to State';
           applyBtn.className = 'btn btn-primary';
         }
         this.log('PRIOR: SAFE PREDICTION', prediction.message);
@@ -295,9 +295,9 @@
           detectedCycles: []
         });
 
-        this.log('PRESET 1', '🟢 Loaded Safe State: System has ample free resources. No deadlocks.');
+        this.log('CASE I', 'Benchmark Loaded: Safe State. System has ample free resources; all processes can complete.');
       } else if (presetNumber === 2) {
-        // Preset 2: 🟡 Prior to Deadlock (Deadlock Risk / Pre-Deadlock Warning)
+        // Preset 2: Prior to Deadlock (Deadlock Risk / Pre-Deadlock Warning)
         document.getElementById('btn-preset-risk')?.classList.add('active');
         state.loadSnapshot({
           resourceNames: ['R0', 'R1'],
@@ -319,9 +319,9 @@
           detectedCycles: []
         });
 
-        this.log('PRESET 2', '🟡 Loaded Prior-to-Deadlock Risk: P1 is waiting for R1 held by P0. If P0 requests R0, a circular deadlock is imminent! Use "Test Request" below.');
+        this.log('CASE II', 'Benchmark Loaded: Pre-Deadlock Risk. P1 is waiting for R1 held by P0. If P0 claims R0, a circular deadlock is induced. Test via Experiment 1.');
       } else if (presetNumber === 3) {
-        // Preset 3: 🔴 During Deadlock (Active Circular Wait)
+        // Preset 3: During Deadlock (Active Circular Wait)
         document.getElementById('btn-preset-deadlock')?.classList.add('active');
         state.loadSnapshot({
           resourceNames: ['R0', 'R1'],
@@ -343,7 +343,7 @@
           detectedCycles: []
         });
 
-        this.log('PRESET 3', '🔴 Loaded Active Deadlock (During): P0 holds R0 and wants R1; P1 holds R1 and wants R0. Active cycle P0 ⇄ P1!');
+        this.log('CASE III', 'Benchmark Loaded: Active Deadlock (During). P0 holds R0 and requests R1; P1 holds R1 and requests R0. Mutual circular wait P0 ⇄ P1 active.');
       }
 
       this.runDetection(true);
