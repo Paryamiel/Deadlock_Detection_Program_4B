@@ -1,14 +1,12 @@
 /**
- * app.js - Simplified, Beginner-Friendly Application Controller
+ * app.js - Application Controller for Deadlock Detection Simulator
  * 
  * Features:
- * 1. Pre-deadlock detection (Prior) & Active deadlock detection (During).
- * 2. Interactive "Test Request Before Granting" Predictive Simulator.
- * 3. 3 Clear, educational presets:
- *    - Preset 1: 🟢 Safe Running State (No Deadlock)
- *    - Preset 2: 🟡 Prior to Deadlock (Deadlock Risk / Pre-Deadlock Warning)
- *    - Preset 3: 🔴 During Deadlock (Active Circular Wait)
- * 4. Simple one-click "Break Deadlock / Auto-Resolve".
+ * 1. Presets (Safe, Risk, Deadlock) + RANDOM Option (dynamic valid graph generation).
+ * 2. Guaranteed immediate graph presentation with automatic centering.
+ * 3. Resource Allocation Graph (RAG) & Wait-For Graph (WFG) mode control.
+ * 4. Tab switching between Simulator Dashboard & Beginner Instructions.
+ * 5. Predictive hypothesis testing (Prior to Deadlock) & Cycle detection (During Deadlock).
  */
 
 (function (root) {
@@ -19,10 +17,11 @@
       this.timerId = null;
       this.isAutoDetect = true;
       this.logs = [];
+      this.currentPreset = 1;
     }
 
     init() {
-      // 1. Initialize renderer
+      // 1. Initialize visual renderer with canvas ID
       root.DeadlockRenderer?.init('wfg-canvas');
 
       // 2. Subscribe to state changes
@@ -30,16 +29,16 @@
         this.onStateChanged(event, snapshot, payload);
       });
 
-      // 3. Bind UI buttons and inputs
+      // 3. Bind UI buttons and input triggers
       this.bindControls();
 
-      // 4. Load initial preset (Preset 1: Safe)
+      // 4. Load initial preset (Preset 1: Safe) with immediate auto-centering
       this.loadPreset(1);
 
       // 5. Start auto-detection ticker
       this.startAutoDetection();
 
-      this.log('SYSTEM', 'Deadlock Detection Visualizer initialized. Ready for detection.');
+      this.log('SYSTEM', 'Deadlock Detection Laboratory initialized. Graph rendered and centered.');
     }
 
     onStateChanged(event, snapshot, payload) {
@@ -52,41 +51,93 @@
     }
 
     bindControls() {
-      // 1. Presets
+      // 1. Preset Scenarios & Random
       document.getElementById('btn-preset-safe')?.addEventListener('click', () => this.loadPreset(1));
       document.getElementById('btn-preset-risk')?.addEventListener('click', () => this.loadPreset(2));
       document.getElementById('btn-preset-deadlock')?.addEventListener('click', () => this.loadPreset(3));
+      document.getElementById('btn-preset-random')?.addEventListener('click', () => this.loadRandomPreset());
 
-      // 2. Main Detection Action
+      // 2. Tab Navigation (Dashboard vs Instructions)
+      const tabDashboard = document.getElementById('tab-btn-dashboard');
+      const tabInstructions = document.getElementById('tab-btn-instructions');
+      const viewDashboard = document.getElementById('view-dashboard');
+      const viewInstructions = document.getElementById('view-instructions');
+
+      const switchTab = (tabName) => {
+        if (tabName === 'dashboard') {
+          tabDashboard?.classList.add('active');
+          tabInstructions?.classList.remove('active');
+          if (viewDashboard) viewDashboard.style.display = 'block';
+          if (viewInstructions) viewInstructions.style.display = 'none';
+
+          // Ensure canvas renders cleanly on return
+          setTimeout(() => {
+            root.DeadlockRenderer?.setupCanvasDpi();
+            root.DeadlockRenderer?.renderGraph();
+          }, 50);
+        } else {
+          tabInstructions?.classList.add('active');
+          tabDashboard?.classList.remove('active');
+          if (viewDashboard) viewDashboard.style.display = 'none';
+          if (viewInstructions) viewInstructions.style.display = 'block';
+        }
+      };
+
+      tabDashboard?.addEventListener('click', () => switchTab('dashboard'));
+      tabInstructions?.addEventListener('click', () => switchTab('instructions'));
+      document.getElementById('btn-return-simulator')?.addEventListener('click', () => switchTab('dashboard'));
+
+      // 3. Canvas Controls: Re-center & Graph Mode Toggle
+      document.getElementById('btn-center-graph')?.addEventListener('click', () => {
+        root.DeadlockRenderer?.centerGraph(true);
+        this.log('VIEW', 'Centered graph visualization layout.');
+      });
+
+      const btnToggleMode = document.getElementById('btn-toggle-graph-mode');
+      btnToggleMode?.addEventListener('click', () => {
+        const curMode = root.DeadlockRenderer?.graphMode || 'rag';
+        const nextMode = curMode === 'rag' ? 'wfg' : 'rag';
+        root.DeadlockRenderer?.setGraphMode(nextMode);
+
+        if (btnToggleMode) {
+          btnToggleMode.innerHTML = nextMode === 'rag' 
+            ? '<span>View: <strong>Resource Allocation (RAG)</strong></span>' 
+            : '<span>View: <strong>Wait-For Graph (WFG)</strong></span>';
+        }
+        this.log('VIEW', `Switched graph mode to ${nextMode.toUpperCase()}.`);
+      });
+
+      // 4. Main Detection Action
       document.getElementById('btn-run-detect')?.addEventListener('click', () => {
         this.runDetection(true);
       });
 
-      // 3. Predictive Simulator: Test Request Before Granting (Prior to Deadlock)
+      // 5. Predictive Simulator: Test Request Before Granting (Prior to Deadlock)
       document.getElementById('btn-predict-request')?.addEventListener('click', () => {
         this.runPredictiveTest();
       });
 
-      // 4. Grant Tested Request button
+      // 6. Grant Tested Request button
       document.getElementById('btn-apply-tested-request')?.addEventListener('click', () => {
         this.applyTestedRequest();
       });
 
-      // 5. One-Click Resolve Deadlock
+      // 7. One-Click Resolve Deadlock
       document.getElementById('btn-break-deadlock')?.addEventListener('click', () => {
         this.breakDeadlock();
       });
 
-      // 6. Reset / Undo
+      // 8. Reset / Undo
       document.getElementById('btn-reset-state')?.addEventListener('click', () => {
-        this.loadPreset(1);
+        this.loadPreset(this.currentPreset);
       });
 
-      // 7. Add Process & Add Resource
+      // 9. Add Process & Add Resource
       document.getElementById('btn-add-proc-simple')?.addEventListener('click', () => {
         const proc = root.DeadlockState?.addProcess();
         if (proc) {
           this.log('STATE', `Added new process ${proc.name}.`);
+          root.DeadlockRenderer?.centerGraph(true);
           this.runDetection(true);
         }
       });
@@ -95,11 +146,12 @@
         const rName = root.DeadlockState?.addResource();
         if (rName) {
           this.log('STATE', `Added new resource type ${rName}.`);
+          root.DeadlockRenderer?.centerGraph(true);
           this.runDetection(true);
         }
       });
 
-      // 8. Terminal Logs
+      // 10. Terminal Logs
       document.getElementById('btn-clear-logs')?.addEventListener('click', () => {
         this.logs = [];
         this.renderLogs();
@@ -254,9 +306,10 @@
     }
 
     /**
-     * Loads one of the 3 beginner-friendly presets
+     * Loads one of the beginner-friendly presets
      */
     loadPreset(presetNumber) {
+      this.currentPreset = presetNumber;
       const state = root.DeadlockState;
       const now = Date.now();
 
@@ -276,14 +329,19 @@
           resourceNames: ['R0', 'R1', 'R2'],
           available: [2, 1, 1],
           processes: [
-            { id: 0, name: 'P0', priority: 5, timestamp: now - 10000, rollbackCount: 0, status: 'READY', x: 180, y: 130 },
-            { id: 1, name: 'P1', priority: 6, timestamp: now - 8000, rollbackCount: 0, status: 'READY', x: 380, y: 130 },
-            { id: 2, name: 'P2', priority: 4, timestamp: now - 4000, rollbackCount: 0, status: 'READY', x: 280, y: 260 }
+            { id: 0, name: 'P0', priority: 5, timestamp: now - 10000, rollbackCount: 0, status: 'READY', x: 160, y: 250 },
+            { id: 1, name: 'P1', priority: 6, timestamp: now - 8000, rollbackCount: 0, status: 'READY', x: 300, y: 250 },
+            { id: 2, name: 'P2', priority: 4, timestamp: now - 4000, rollbackCount: 0, status: 'READY', x: 440, y: 250 }
+          ],
+          resources: [
+            { id: 0, name: 'R0', x: 160, y: 95, instances: 3 },
+            { id: 1, name: 'R1', x: 300, y: 95, instances: 2 },
+            { id: 2, name: 'R2', x: 440, y: 95, instances: 2 }
           ],
           allocation: [
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1]
+            [1, 0, 0], // P0 holds R0
+            [0, 1, 0], // P1 holds R1
+            [0, 0, 1]  // P2 holds R2
           ],
           request: [
             [0, 0, 0],
@@ -295,7 +353,7 @@
           detectedCycles: []
         });
 
-        this.log('CASE I', 'Benchmark Loaded: Safe State. System has ample free resources; all processes can complete.');
+        this.log('CASE I', 'Benchmark Loaded: Safe State. All processes hold adequate resources and can complete.');
       } else if (presetNumber === 2) {
         // Preset 2: Prior to Deadlock (Deadlock Risk / Pre-Deadlock Warning)
         document.getElementById('btn-preset-risk')?.classList.add('active');
@@ -303,15 +361,19 @@
           resourceNames: ['R0', 'R1'],
           available: [1, 0],
           processes: [
-            { id: 0, name: 'P0', priority: 5, timestamp: now - 9000, rollbackCount: 0, status: 'READY', x: 200, y: 180 },
-            { id: 1, name: 'P1', priority: 7, timestamp: now - 7000, rollbackCount: 0, status: 'WAITING', x: 380, y: 180 }
+            { id: 0, name: 'P0', priority: 5, timestamp: now - 9000, rollbackCount: 0, status: 'READY', x: 200, y: 250 },
+            { id: 1, name: 'P1', priority: 7, timestamp: now - 7000, rollbackCount: 0, status: 'WAITING', x: 400, y: 250 }
+          ],
+          resources: [
+            { id: 0, name: 'R0', x: 200, y: 95, instances: 1 },
+            { id: 1, name: 'R1', x: 400, y: 95, instances: 1 }
           ],
           allocation: [
             [0, 1], // P0 holds R1
             [0, 0]  // P1 holds nothing
           ],
           request: [
-            [0, 0], // P0 has no pending request currently
+            [0, 0], // P0 has no pending request
             [0, 1]  // P1 is waiting for R1 (held by P0)
           ],
           mode: 'single',
@@ -319,7 +381,7 @@
           detectedCycles: []
         });
 
-        this.log('CASE II', 'Benchmark Loaded: Pre-Deadlock Risk. P1 is waiting for R1 held by P0. If P0 claims R0, a circular deadlock is induced. Test via Experiment 1.');
+        this.log('CASE II', 'Benchmark Loaded: Pre-Deadlock Risk. P1 is waiting for R1 held by P0. Evaluate prospective claims before granting.');
       } else if (presetNumber === 3) {
         // Preset 3: During Deadlock (Active Circular Wait)
         document.getElementById('btn-preset-deadlock')?.classList.add('active');
@@ -327,8 +389,12 @@
           resourceNames: ['R0', 'R1'],
           available: [0, 0],
           processes: [
-            { id: 0, name: 'P0', priority: 5, timestamp: now - 15000, rollbackCount: 0, status: 'WAITING', x: 200, y: 180 },
-            { id: 1, name: 'P1', priority: 7, timestamp: now - 10000, rollbackCount: 0, status: 'WAITING', x: 380, y: 180 }
+            { id: 0, name: 'P0', priority: 5, timestamp: now - 15000, rollbackCount: 0, status: 'WAITING', x: 200, y: 250 },
+            { id: 1, name: 'P1', priority: 7, timestamp: now - 10000, rollbackCount: 0, status: 'WAITING', x: 400, y: 250 }
+          ],
+          resources: [
+            { id: 0, name: 'R0', x: 200, y: 95, instances: 1 },
+            { id: 1, name: 'R1', x: 400, y: 95, instances: 1 }
           ],
           allocation: [
             [1, 0], // P0 holds R0
@@ -343,9 +409,162 @@
           detectedCycles: []
         });
 
-        this.log('CASE III', 'Benchmark Loaded: Active Deadlock (During). P0 holds R0 and requests R1; P1 holds R1 and requests R0. Mutual circular wait P0 ⇄ P1 active.');
+        this.log('CASE III', 'Benchmark Loaded: Active Deadlock (During). P0 holds R0 and requests R1; P1 holds R1 and requests R0 (Circular wait P0 ⇄ P1).');
       }
 
+      // Automatically center and guarantee visible layout immediately
+      root.DeadlockRenderer?.centerGraph(true);
+      this.runDetection(true);
+    }
+
+    /**
+     * Loads a dynamic, randomized scenario guaranteed to display centered immediately
+     */
+    loadRandomPreset() {
+      this.currentPreset = 4;
+      const state = root.DeadlockState;
+      const now = Date.now();
+
+      // Reset test result box
+      const resultBox = document.getElementById('predict-result-box');
+      if (resultBox) resultBox.style.display = 'none';
+      const applyBtn = document.getElementById('btn-apply-tested-request');
+      if (applyBtn) applyBtn.style.display = 'none';
+
+      // Highlight active button
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('btn-preset-random')?.classList.add('active');
+
+      // Random parameters
+      // 3 possible scenario archetypes: 0 = Deadlock (45%), 1 = Risk/Contention (30%), 2 = Safe (25%)
+      const scenarioRoll = Math.random();
+      let archetype = 'deadlock';
+      if (scenarioRoll < 0.45) {
+        archetype = 'deadlock';
+      } else if (scenarioRoll < 0.75) {
+        archetype = 'risk';
+      } else {
+        archetype = 'safe';
+      }
+
+      let resourceNames, available, processes, resources, allocation, request;
+
+      if (archetype === 'deadlock') {
+        // 2 or 3 processes in circular deadlock
+        const useThree = Math.random() > 0.5;
+        if (useThree) {
+          // P0 -> P1 -> P2 -> P0
+          resourceNames = ['R0', 'R1', 'R2'];
+          available = [0, 0, 0];
+          processes = [
+            { id: 0, name: 'P0', priority: 5, timestamp: now - 12000, rollbackCount: 0, status: 'WAITING', x: 160, y: 250 },
+            { id: 1, name: 'P1', priority: 6, timestamp: now - 9000, rollbackCount: 0, status: 'WAITING', x: 300, y: 250 },
+            { id: 2, name: 'P2', priority: 7, timestamp: now - 6000, rollbackCount: 0, status: 'WAITING', x: 440, y: 250 }
+          ];
+          resources = [
+            { id: 0, name: 'R0', x: 160, y: 95, instances: 1 },
+            { id: 1, name: 'R1', x: 300, y: 95, instances: 1 },
+            { id: 2, name: 'R2', x: 440, y: 95, instances: 1 }
+          ];
+          allocation = [
+            [1, 0, 0], // P0 holds R0
+            [0, 1, 0], // P1 holds R1
+            [0, 0, 1]  // P2 holds R2
+          ];
+          request = [
+            [0, 1, 0], // P0 requests R1
+            [0, 0, 1], // P1 requests R2
+            [1, 0, 0]  // P2 requests R0
+          ];
+          this.log('RANDOM: DEADLOCK', 'Generated 3-way circular wait: P0 → P1 → P2 → P0.');
+        } else {
+          // 2-process circular deadlock
+          resourceNames = ['R0', 'R1'];
+          available = [0, 0];
+          processes = [
+            { id: 0, name: 'P0', priority: 5, timestamp: now - 10000, rollbackCount: 0, status: 'WAITING', x: 200, y: 250 },
+            { id: 1, name: 'P1', priority: 8, timestamp: now - 7000, rollbackCount: 0, status: 'WAITING', x: 400, y: 250 }
+          ];
+          resources = [
+            { id: 0, name: 'R0', x: 200, y: 95, instances: 1 },
+            { id: 1, name: 'R1', x: 400, y: 95, instances: 1 }
+          ];
+          allocation = [
+            [1, 0], // P0 holds R0
+            [0, 1]  // P1 holds R1
+          ];
+          request = [
+            [0, 1], // P0 requests R1
+            [1, 0]  // P1 requests R0
+          ];
+          this.log('RANDOM: DEADLOCK', 'Generated mutual circular deadlock: P0 ⇄ P1.');
+        }
+      } else if (archetype === 'risk') {
+        // Pre-deadlock contention: 1 process waiting on another
+        resourceNames = ['R0', 'R1', 'R2'];
+        available = [1, 0, 1];
+        processes = [
+          { id: 0, name: 'P0', priority: 6, timestamp: now - 11000, rollbackCount: 0, status: 'READY', x: 160, y: 250 },
+          { id: 1, name: 'P1', priority: 5, timestamp: now - 8000, rollbackCount: 0, status: 'WAITING', x: 300, y: 250 },
+          { id: 2, name: 'P2', priority: 4, timestamp: now - 5000, rollbackCount: 0, status: 'READY', x: 440, y: 250 }
+        ];
+        resources = [
+          { id: 0, name: 'R0', x: 160, y: 95, instances: 2 },
+          { id: 1, name: 'R1', x: 300, y: 95, instances: 1 },
+          { id: 2, name: 'R2', x: 440, y: 95, instances: 1 }
+        ];
+        allocation = [
+          [1, 1, 0], // P0 holds R0, R1
+          [0, 0, 0], // P1 holds nothing
+          [0, 0, 0]  // P2 holds nothing
+        ];
+        request = [
+          [0, 0, 0],
+          [0, 1, 0], // P1 waiting for R1 (held by P0)
+          [0, 0, 0]
+        ];
+        this.log('RANDOM: PRE-DEADLOCK', 'Generated resource contention scenario: P1 waiting for R1 held by P0.');
+      } else {
+        // Safe Concurrency state
+        resourceNames = ['R0', 'R1', 'R2'];
+        available = [2, 2, 1];
+        processes = [
+          { id: 0, name: 'P0', priority: 5, timestamp: now - 10000, rollbackCount: 0, status: 'READY', x: 160, y: 250 },
+          { id: 1, name: 'P1', priority: 7, timestamp: now - 8000, rollbackCount: 0, status: 'READY', x: 300, y: 250 },
+          { id: 2, name: 'P2', priority: 4, timestamp: now - 4000, rollbackCount: 0, status: 'READY', x: 440, y: 250 }
+        ];
+        resources = [
+          { id: 0, name: 'R0', x: 160, y: 95, instances: 3 },
+          { id: 1, name: 'R1', x: 300, y: 95, instances: 2 },
+          { id: 2, name: 'R2', x: 440, y: 95, instances: 2 }
+        ];
+        allocation = [
+          [1, 0, 0],
+          [0, 0, 1],
+          [0, 0, 0]
+        ];
+        request = [
+          [0, 0, 0],
+          [0, 0, 0],
+          [0, 1, 0] // P2 requests R1 (available: 2, can be satisfied!)
+        ];
+        this.log('RANDOM: SAFE STATE', 'Generated healthy concurrency scenario: all requests are satisfyable.');
+      }
+
+      state.loadSnapshot({
+        resourceNames,
+        available,
+        processes,
+        resources,
+        allocation,
+        request,
+        mode: 'single',
+        deadlockedProcessIds: [],
+        detectedCycles: []
+      });
+
+      // Guarantee immediate centered layout
+      root.DeadlockRenderer?.centerGraph(true);
       this.runDetection(true);
     }
 
@@ -366,6 +585,7 @@
         else if (item.tag.includes('DURING') || item.tag.includes('DEADLOCK')) tagClass = 'tag-danger';
         else if (item.tag.includes('SAFE')) tagClass = 'tag-success';
         else if (item.tag.includes('RECOVERY')) tagClass = 'tag-purple';
+        else if (item.tag.includes('RANDOM')) tagClass = 'tag-cyan';
 
         return `
           <div class="log-entry">

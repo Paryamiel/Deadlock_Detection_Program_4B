@@ -1,10 +1,10 @@
-# Deadlock Detection Visualizer (Prior & During Detection)
+# Deadlock Detection & Analysis System (Prior & During Detection)
 
-An interactive, beginner-friendly **Deadlock Detection Visualizer & Simulator** built for Operating Systems courses and concurrency labs. 
+An interactive, beginner-friendly **Deadlock Detection Visualizer & Concurrency Laboratory** built for Operating Systems courses and concurrency labs. 
 
 The application focuses on detecting deadlocks across both critical phases:
-1. **PRIOR TO DEADLOCK (Pre-Deadlock Risk & Predictive Detection)**: Detects warning signs and allows users to simulate resource requests *before* granting them to predict whether an allocation will cause a deadlock.
-2. **DURING DEADLOCK (Active Circular Wait Detection)**: Constructs the real-time Wait-For Graph (WFG) and highlights active dependency cycles using Three-Color Depth-First Search (DFS) with pulsing visual animations.
+1. **PRIOR TO DEADLOCK (Pre-Deadlock Risk & Predictive Detection)**: Detects warning signs and allows users to simulate resource requests *before* granting them to predict whether an allocation preserves safety or triggers a deadlock cycle.
+2. **DURING DEADLOCK (Active Circular Wait Detection)**: Constructs the real-time Resource Allocation Graph (RAG) and Wait-For Graph (WFG), highlighting active dependency cycles using Three-Color Depth-First Search (DFS) with pulsing visual animations.
 
 Runs 100% client-side with zero external dependencies and is ready for immediate deployment on **GitHub Pages**.
 
@@ -12,22 +12,28 @@ Runs 100% client-side with zero external dependencies and is ready for immediate
 
 ## 🌟 Beginner-Friendly Features
 
-- **3 Educational Scenarios (One-Click Learning)**:
-  - 🟢 **1. Safe State**: Normal healthy execution. Available resources satisfy process claims; no deadlocks.
-  - 🟡 **2. Prior to Deadlock (Pre-Deadlock Risk)**: Demonstrates an unsafe state where holding resources while waiting for contested ones creates deadlock risk.
-  - 🔴 **3. During Deadlock (Active Circular Wait)**: Demonstrates an active circular wait ($P_0 \to P_1 \to P_0$). Highlighted in pulsing crimson arrows on the graph.
+- **4 Educational Scenarios (One-Click Learning)**:
+  - 🟢 **Case I: Safe State**: Normal healthy execution. Adequate capacity; all processes can complete without deadlock.
+  - 🟡 **Case II: Prior to Deadlock (Pre-Deadlock Risk)**: Demonstrates an unsafe state where holding resources while waiting for contested ones creates deadlock risk.
+  - 🔴 **Case III: During Deadlock (Active Circular Wait)**: Demonstrates an active circular wait ($P_0 \to P_1 \to P_0$). Highlighted in pulsing crimson arrows on the graph.
+  - 🎲 **Case IV: Random Scenario**: Generates a dynamic randomized configuration of processes and resources with immediate centered visualization!
+- **Interactive Visual Graph (Resource Allocation Graph & Wait-For Graph)**:
+  - **Draggable Processes & Resources**: Freely click and drag both Process circles and Resource boxes to place and arrange them anywhere on the canvas.
+  - **Immediate Presentation**: The graph is automatically centered and fitted on start and for every preset (including Random)—no manual centering required!
+  - **Graph View Toggle**: Switch between **Resource Allocation Graph (RAG)** (Processes + Resources with assignment/request arrows) and **Wait-For Graph (WFG)** (process-to-process wait edges).
+- **Live Graph Interpretation (Figure 1.1)**:
+  - Directly beneath the graph, a live plain-English summary explains what the graph represents, e.g.:
+    `"P1 holds 1 instance of R1 and requests 1 instance of R2 (Waiting for R2)."`
+    along with an immediate system-level conclusion.
+- **📘 Built-in Instructions & Beginner's Guide Tab**:
+  - Accessible via the top navigation tab bar.
+  - Explains deadlocks with real-world analogies (4-way intersection), defines all graph symbols, and provides a clear 6-step practical tutorial.
 - **🔮 Test a Request (Detect Prior to Deadlock)**:
-  - Select any process and resource, click **"Test Request"**, and the system tests whether granting it keeps the system in a safe sequence or traps it into a deadlock cycle.
-- **Plain-English Explanation Card**:
-  - Automatically translates complex graph states into simple sentences explaining what is happening right now and why.
-- **Interactive Visual Graph (Wait-For Graph)**:
-  - Circular process nodes that can be dragged freely.
-  - Directional arrows labeled with the requested resource.
-  - Pulsing crimson highlight when a deadlock cycle is detected.
+  - Select any process and resource in Experiment 1, click **"Evaluate Request Safety"**, and the system tests whether granting it is safe or if it triggers a deadlock cycle before committing the allocation.
 - **Intuitive Resource & Process Table**:
   - Live editable boxes for Free Available Resources, Held Resources, and Requested Resources.
 - **⚡ One-Click Break Deadlock**:
-  - Automatically breaks circular wait states to restore the system to safety.
+  - Automatically preempts contested resources from the optimal victim process to restore safety.
 
 ---
 
@@ -35,7 +41,9 @@ Runs 100% client-side with zero external dependencies and is ready for immediate
 
 ### 1. During Deadlock (Active Cycle Detection)
 When two or more processes are locked in circular wait:
-- A directed edge $P_i \to P_j$ exists if $P_i$ is waiting for a resource held by $P_j$.
+- In Resource Allocation Graphs:
+  - Assignment edge: Resource $R_j \to$ Process $P_i$ (Process holds resource).
+  - Request edge: Process $P_i \to$ Resource $R_j$ (Process awaits resource).
 - Cycle detection uses **Three-Color Depth-First Search (DFS)**:
   - **White (0)**: Unvisited node.
   - **Gray (1)**: Currently exploring node in recursion stack. If an edge leads to a Gray node, a **cycle is confirmed**!
@@ -76,12 +84,10 @@ The repository contains an automated deployment workflow in `.github/workflows/d
 1. Push changes to GitHub:
    ```bash
    git add .
-   git commit -m "Update: simplified prior & during deadlock detection visualizer"
+   git commit -m "Update: add random option, movable processes and resources, live graph interpretation, and beginner instructions tab"
    git push origin main
    ```
-2. In your repository on GitHub, go to **Settings → Pages**.
-3. Under **Build and deployment → Source**, select **GitHub Actions** (or **Deploy from a branch → main / (root)**).
-4. The site will be live at:
+2. The GitHub Actions workflow automatically deploys to:
    `https://paryamiel.github.io/Deadlock_Detection_Program_4B/`
 
 ---
@@ -90,18 +96,16 @@ The repository contains an automated deployment workflow in `.github/workflows/d
 
 ```text
 DeadlockDetectionProgram/
-├── index.html                   # Simplified, beginner-friendly UI layout
+├── index.html                   # Semantic UI layout with Dashboard & Instructions tabs
 ├── css/
-│   └── styles.css               # Clean modern dark-mode styling
+│   └── styles.css               # Clean academic styling, responsive layouts
 ├── js/
-│   ├── state.js                 # Reactive state manager
+│   ├── state.js                 # Reactive state manager with process & resource node tracking
 │   ├── detector.js              # Prior (Predictive) & During (Cycle) detection engine
 │   ├── recovery.js              # Resource preemption & rollback resolution
-│   ├── renderer.js              # HTML5 Canvas graph & simplified resource tables
-│   └── app.js                   # Application controller, presets & request tester
-├── .github/
-│   └── workflows/
-│       └── deploy.yml           # GitHub Actions workflow for automated Pages deployment
-├── prompt.md                    # Initial assignment specification
-└── README.md                    # Documentation
+│   ├── renderer.js              # Dual RAG/WFG visualizer & live graph interpretation
+│   └── app.js                   # Application controller with presets & random scenario generator
+└── .github/
+    └── workflows/
+        └── deploy.yml           # Automated deployment workflow for GitHub Pages
 ```

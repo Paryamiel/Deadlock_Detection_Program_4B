@@ -2,14 +2,14 @@
  * renderer.js - Academic & Formal Visual Graph & Matrix Renderer
  * 
  * Provides:
- * 1. Clean, publication-quality Canvas Wait-For Graph with formal node topologies,
- *    directional dependency vectors, and distinct cycle path identification.
- * 2. Formal academic state assessment banners distinguishing:
- *    - SAFE CONCURRENCY STATE
- *    - PRE-ALLOCATION DEADLOCK RISK (Hypothesis Verification)
- *    - ACTIVE DEADLOCK STATE (Circular Wait Confirmed)
- * 3. Booktabs-styled scientific tables for processes, allocated vectors,
- *    pending claim matrices, and available system capacity.
+ * 1. Dual-Graph Canvas Engine:
+ *    - Resource Allocation Graph (RAG) [Default]: Displays both Processes (circles)
+ *      and Resources (rectangles with instance capacity). Both can be moved and placed freely.
+ *    - Wait-For Graph (WFG): Direct process-to-process dependency topology.
+ * 2. Instant Auto-Centering on Start, Presets & Random option (never requires manual center click).
+ * 3. Live Figure 1.1: Human-readable Graph Interpretation & Flow Analysis
+ *    (e.g., "P1 holds 1 instance of R1 and requests 1 instance of R2").
+ * 4. Interactive table & metric synchronization.
  */
 
 (function (root) {
@@ -21,6 +21,11 @@
       this.ctx = null;
       this.dpr = 1;
 
+      this.logicalWidth = 600;
+      this.logicalHeight = 360;
+
+      this.graphMode = 'rag'; // 'rag' (Resource Allocation Graph) or 'wfg' (Wait-For Graph)
+
       this.draggedNode = null;
       this.hoveredNode = null;
       this.dragOffset = { x: 0, y: 0 };
@@ -31,14 +36,19 @@
       // Formal Academic Palette (High Contrast, Publication Quality)
       this.theme = {
         bg: '#ffffff',
-        gridLine: '#eef2f6',
-        nodeReady: '#15803d',      // Academic Forest Green
-        nodeWaiting: '#b45309',    // Academic Warm Amber
-        nodeDeadlocked: '#991b1b', // Academic Crimson / Carmine
-        nodeTerminated: '#64748b', // Slate
-        edgeNormal: '#334155',     // Ink / Slate
-        edgeCycle: '#991b1b',      // Academic Crimson
-        edgeCycleGlow: 'rgba(153, 27, 27, 0.25)'
+        gridLine: '#f1f5f9',
+        borderFrame: '#cbd5e1',
+        nodeReady: '#15803d',        // Academic Forest Green
+        nodeWaiting: '#b45309',      // Academic Warm Amber
+        nodeDeadlocked: '#991b1b',   // Academic Crimson
+        nodeTerminated: '#64748b',   // Slate
+        resourceBorder: '#1e3a8a',   // Academic Oxford Blue
+        resourceBg: '#f8fafc',
+        resourceContested: '#991b1b',
+        edgeHold: '#0f766e',         // Teal/Forest for Allocation (Resource -> Process)
+        edgeRequest: '#b45309',      // Amber for Request (Process -> Resource)
+        edgeCycle: '#991b1b',        // Crimson for Deadlock Cycle
+        edgeWfg: '#334155'
       };
     }
 
@@ -49,12 +59,34 @@
 
       this.setupCanvasDpi();
       this.bindCanvasEvents();
+      this.centerGraph(false);
       this.startAnimationLoop();
 
+      // Listen for window resize and container resizing
       window.addEventListener('resize', () => {
         this.setupCanvasDpi();
         this.renderGraph();
       });
+
+      if (window.ResizeObserver && this.canvas.parentElement) {
+        const ro = new ResizeObserver(() => {
+          this.setupCanvasDpi();
+          this.renderGraph();
+        });
+        ro.observe(this.canvas.parentElement);
+      }
+
+      // Initial interpretation & status update
+      this.updateStatusSummary();
+      this.updateGraphInterpretation();
+    }
+
+    setGraphMode(mode) {
+      if (mode === 'rag' || mode === 'wfg') {
+        this.graphMode = mode;
+        this.renderGraph();
+        this.updateGraphInterpretation();
+      }
     }
 
     setupCanvasDpi() {
@@ -62,8 +94,10 @@
       const rect = this.canvas.getBoundingClientRect();
       this.dpr = window.devicePixelRatio || 1;
 
-      const width = rect.width || 600;
-      const height = rect.height || 360;
+      // Ensure valid width even if layout is computing
+      const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 600;
+      const width = rect.width > 50 ? rect.width : (parentW > 50 ? parentW : 640);
+      const height = rect.height > 50 ? rect.height : 360;
 
       this.canvas.width = Math.round(width * this.dpr);
       this.canvas.height = Math.round(height * this.dpr);
@@ -72,6 +106,18 @@
       this.ctx.scale(this.dpr, this.dpr);
       this.logicalWidth = width;
       this.logicalHeight = height;
+    }
+
+    /**
+     * Center nodes automatically in the viewport
+     */
+    centerGraph(reRender = true) {
+      this.setupCanvasDpi();
+      root.DeadlockState?.autoCenterLayout(this.logicalWidth, this.logicalHeight);
+      if (reRender) {
+        this.renderGraph();
+        this.updateGraphInterpretation();
+      }
     }
 
     bindCanvasEvents() {
@@ -95,9 +141,17 @@
       this.canvas.addEventListener('mousemove', (e) => {
         const pos = getPos(e);
         if (this.draggedNode) {
-          this.draggedNode.x = Math.max(40, Math.min(this.logicalWidth - 40, pos.x - this.dragOffset.x));
-          this.draggedNode.y = Math.max(40, Math.min(this.logicalHeight - 40, pos.y - this.dragOffset.y));
-          root.DeadlockState?.updateProcessPosition(this.draggedNode.id, this.draggedNode.x, this.draggedNode.y);
+          const nx = Math.max(45, Math.min(this.logicalWidth - 45, pos.x - this.dragOffset.x));
+          const ny = Math.max(35, Math.min(this.logicalHeight - 35, pos.y - this.dragOffset.y));
+          this.draggedNode.x = nx;
+          this.draggedNode.y = ny;
+
+          if (this.draggedNode.nodeType === 'resource') {
+            root.DeadlockState?.updateResourcePosition(this.draggedNode.id, nx, ny);
+          } else {
+            root.DeadlockState?.updateProcessPosition(this.draggedNode.id, nx, ny);
+          }
+          this.updateGraphInterpretation();
         } else {
           const hovered = this.findNodeAt(pos.x, pos.y);
           if (hovered !== this.hoveredNode) {
@@ -114,7 +168,7 @@
         }
       });
 
-      // Touch events for tablets & touch devices
+      // Touch events for mobile/tablet devices
       this.canvas.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) {
           const touch = e.touches[0];
@@ -134,9 +188,17 @@
           const touch = e.touches[0];
           const rect = this.canvas.getBoundingClientRect();
           const pos = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-          this.draggedNode.x = Math.max(40, Math.min(this.logicalWidth - 40, pos.x - this.dragOffset.x));
-          this.draggedNode.y = Math.max(40, Math.min(this.logicalHeight - 40, pos.y - this.dragOffset.y));
-          root.DeadlockState?.updateProcessPosition(this.draggedNode.id, this.draggedNode.x, this.draggedNode.y);
+          const nx = Math.max(45, Math.min(this.logicalWidth - 45, pos.x - this.dragOffset.x));
+          const ny = Math.max(35, Math.min(this.logicalHeight - 35, pos.y - this.dragOffset.y));
+          this.draggedNode.x = nx;
+          this.draggedNode.y = ny;
+
+          if (this.draggedNode.nodeType === 'resource') {
+            root.DeadlockState?.updateResourcePosition(this.draggedNode.id, nx, ny);
+          } else {
+            root.DeadlockState?.updateProcessPosition(this.draggedNode.id, nx, ny);
+          }
+          this.updateGraphInterpretation();
           e.preventDefault();
         }
       }, { passive: false });
@@ -146,20 +208,36 @@
       });
     }
 
+    /**
+     * Hit tests both Processes and Resources
+     */
     findNodeAt(x, y) {
       const state = root.DeadlockState?.getSnapshot();
       if (!state) return null;
-      const radius = 32;
 
+      // 1. Check Processes (circles, radius 30)
+      const procRadius = 32;
       for (let i = state.processes.length - 1; i >= 0; i--) {
         const p = state.processes[i];
         if (p.status === 'TERMINATED') continue;
         const dx = x - p.x;
         const dy = y - p.y;
-        if (dx * dx + dy * dy <= radius * radius) {
-          return p;
+        if (dx * dx + dy * dy <= procRadius * procRadius) {
+          return { ...p, nodeType: 'process' };
         }
       }
+
+      // 2. Check Resources (rectangles 68 x 44) in RAG mode
+      if (this.graphMode === 'rag' && state.resources) {
+        const halfW = 38, halfH = 26;
+        for (let j = state.resources.length - 1; j >= 0; j--) {
+          const r = state.resources[j];
+          if (Math.abs(x - r.x) <= halfW && Math.abs(y - r.y) <= halfH) {
+            return { ...r, index: j, nodeType: 'resource' };
+          }
+        }
+      }
+
       return null;
     }
 
@@ -172,6 +250,9 @@
       this.animId = requestAnimationFrame(loop);
     }
 
+    /**
+     * Main canvas rendering entrypoint
+     */
     renderGraph() {
       if (!this.ctx || !this.canvas) return;
       const ctx = this.ctx;
@@ -183,6 +264,200 @@
       ctx.clearRect(0, 0, w, h);
       this.drawBackgroundGrid(ctx, w, h);
 
+      if (this.graphMode === 'rag') {
+        this.renderResourceAllocationGraph(ctx, state, w, h);
+      } else {
+        this.renderWaitForGraph(ctx, state, w, h);
+      }
+
+      // Hover tooltip
+      if (this.hoveredNode && !this.draggedNode) {
+        this.drawTooltip(ctx, this.hoveredNode, state);
+      }
+    }
+
+    drawBackgroundGrid(ctx, w, h) {
+      const step = 28;
+      ctx.save();
+      ctx.fillStyle = this.theme.bg;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = this.theme.gridLine;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x < w; x += step) {
+        ctx.moveTo(x, 0); ctx.lineTo(x, h);
+      }
+      for (let y = 0; y < h; y += step) {
+        ctx.moveTo(0, y); ctx.lineTo(w, y);
+      }
+      ctx.stroke();
+
+      // Subtle architectural frame around the canvas
+      ctx.strokeStyle = this.theme.borderFrame;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+
+      ctx.restore();
+    }
+
+    /**
+     * Renders Resource Allocation Graph (Processes + Resources + Assignment & Request Edges)
+     */
+    renderResourceAllocationGraph(ctx, state, w, h) {
+      const { processes, resources, allocation, request } = state;
+
+      // Identify cycle edges in RAG
+      const cycleEdges = this.computeCycleRAGEdges(state);
+
+      // 1. Draw Assignment Edges: Resource -> Process (Process holds Resource)
+      for (let i = 0; i < processes.length; i++) {
+        const proc = processes[i];
+        if (proc.status === 'TERMINATED') continue;
+
+        for (let j = 0; j < resources.length; j++) {
+          const held = (allocation[i] && allocation[i][j]) || 0;
+          if (held > 0) {
+            const res = resources[j];
+            const isCycle = cycleEdges.assignments.has(`${res.id}->${proc.id}`);
+            this.drawRagArrow(ctx, res, proc, 'resource', 'process', `holds: ${held}`, this.theme.edgeHold, isCycle);
+          }
+        }
+      }
+
+      // 2. Draw Request Edges: Process -> Resource (Process requests Resource)
+      for (let i = 0; i < processes.length; i++) {
+        const proc = processes[i];
+        if (proc.status === 'TERMINATED') continue;
+
+        for (let j = 0; j < resources.length; j++) {
+          const req = (request[i] && request[i][j]) || 0;
+          if (req > 0) {
+            const res = resources[j];
+            const isCycle = cycleEdges.requests.has(`${proc.id}->${res.id}`);
+            this.drawRagArrow(ctx, proc, res, 'process', 'resource', `requests: ${req}`, this.theme.edgeRequest, isCycle);
+          }
+        }
+      }
+
+      // 3. Draw Resource Nodes (Rectangles with instances)
+      resources.forEach((res, rIdx) => {
+        const isHovered = this.hoveredNode && this.hoveredNode.nodeType === 'resource' && (this.hoveredNode.id === res.id || this.hoveredNode.index === rIdx);
+        const isContested = cycleEdges.contestedResources.has(res.id);
+        this.drawResourceNode(ctx, res, isContested, isHovered);
+      });
+
+      // 4. Draw Process Nodes (Circles)
+      processes.forEach(proc => {
+        if (proc.status === 'TERMINATED') return;
+        const isDeadlocked = state.deadlockedProcessIds.includes(proc.id);
+        const isHovered = this.hoveredNode && this.hoveredNode.nodeType === 'process' && this.hoveredNode.id === proc.id;
+        this.drawProcessNode(ctx, proc, isDeadlocked, isHovered);
+      });
+    }
+
+    /**
+     * Computes which assignment & request edges belong to detected cycles
+     */
+    computeCycleRAGEdges(state) {
+      const assignments = new Set();
+      const requests = new Set();
+      const contestedResources = new Set();
+
+      if (!state.detectedCycles || state.detectedCycles.length === 0) {
+        return { assignments, requests, contestedResources };
+      }
+
+      const { processes, allocation, request, resources } = state;
+
+      state.detectedCycles.forEach(cycle => {
+        for (let k = 0; k < cycle.length - 1; k++) {
+          const fromPid = cycle[k];
+          const toPid = cycle[k + 1];
+
+          const fromIdx = processes.findIndex(p => p.id === fromPid);
+          const toIdx = processes.findIndex(p => p.id === toPid);
+          if (fromIdx === -1 || toIdx === -1) continue;
+
+          // Find which resource fromPid is requesting that toPid holds
+          for (let r = 0; r < resources.length; r++) {
+            if ((request[fromIdx] && request[fromIdx][r] > 0) && (allocation[toIdx] && allocation[toIdx][r] > 0)) {
+              requests.add(`${fromPid}->${resources[r].id}`);
+              assignments.add(`${resources[r].id}->${toPid}`);
+              contestedResources.add(resources[r].id);
+            }
+          }
+        }
+      });
+
+      return { assignments, requests, contestedResources };
+    }
+
+    /**
+     * Draws Resource rectangle node
+     */
+    drawResourceNode(ctx, res, isContested, isHovered) {
+      const w = 68;
+      const h = 42;
+      const x = res.x - w / 2;
+      const y = res.y - h / 2;
+      const r = 6; // border radius
+
+      ctx.save();
+
+      // Pulsing indicator for contested resource in cycle
+      if (isContested) {
+        const pulse = (Math.sin(this.animTime * 3) + 1) * 0.5;
+        ctx.strokeStyle = `rgba(153, 27, 27, ${0.4 + pulse * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 3]);
+        this.roundRect(ctx, x - 4, y - 4, w + 8, h + 8, r + 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Fill & Border
+      ctx.fillStyle = isContested ? '#fef2f2' : (isHovered ? '#eff6ff' : '#f8fafc');
+      ctx.strokeStyle = isContested ? '#991b1b' : (isHovered ? '#1e3a8a' : '#334155');
+      ctx.lineWidth = isHovered ? 2.5 : 1.75;
+
+      this.roundRect(ctx, x, y, w, h, r);
+      ctx.fill();
+      ctx.stroke();
+
+      // Resource Title
+      ctx.fillStyle = isContested ? '#991b1b' : '#0f172a';
+      ctx.font = 'bold 13px "Inter", -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(res.name, res.x, res.y - 7);
+
+      // Subtitle / Capacity info
+      ctx.font = '600 9px "JetBrains Mono", monospace';
+      ctx.fillStyle = isContested ? '#b91c1c' : '#475569';
+      ctx.fillText(`${res.available}/${res.instances} free`, res.x, res.y + 9);
+
+      ctx.restore();
+    }
+
+    roundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    /**
+     * Renders Wait-For Graph (Processes only, P_i -> P_j edges)
+     */
+    renderWaitForGraph(ctx, state, w, h) {
       const wfg = root.DeadlockDetector?.buildWaitForGraph(state) || { edges: [] };
       const edges = wfg.edges || [];
 
@@ -206,44 +481,101 @@
         this.drawDirectedEdge(ctx, fromNode, toNode, edge.resourceName, isCycleEdge);
       });
 
-      // Draw processes as large, clear formal circular nodes
+      // Draw processes as circular nodes
       state.processes.forEach(proc => {
+        if (proc.status === 'TERMINATED') return;
         const isDeadlocked = state.deadlockedProcessIds.includes(proc.id);
-        const isHovered = this.hoveredNode && this.hoveredNode.id === proc.id;
+        const isHovered = this.hoveredNode && this.hoveredNode.nodeType === 'process' && this.hoveredNode.id === proc.id;
         this.drawProcessNode(ctx, proc, isDeadlocked, isHovered);
       });
-
-      // Hover tooltip
-      if (this.hoveredNode && !this.draggedNode) {
-        this.drawTooltip(ctx, this.hoveredNode, state);
-      }
     }
 
-    drawBackgroundGrid(ctx, w, h) {
-      const step = 32;
-      ctx.save();
-      ctx.fillStyle = this.theme.bg;
-      ctx.fillRect(0, 0, w, h);
+    /**
+     * Directed arrow between RAG nodes (Process <-> Resource)
+     */
+    drawRagArrow(ctx, fromNode, toNode, fromType, toType, label, defaultColor, isCycle) {
+      const dx = toNode.x - fromNode.x;
+      const dy = toNode.y - fromNode.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 15) return;
 
-      ctx.strokeStyle = this.theme.gridLine;
-      ctx.lineWidth = 1;
+      const ux = dx / dist;
+      const uy = dy / dist;
+
+      // Adjust start and end offsets based on node shapes
+      const fromOffset = fromType === 'process' ? 28 : 22;
+      const toOffset = toType === 'process' ? 32 : 26;
+
+      const curvature = 16;
+      const mx = (fromNode.x + toNode.x) / 2 - uy * curvature;
+      const my = (fromNode.y + toNode.y) / 2 + ux * curvature;
+
+      const startX = fromNode.x + ux * fromOffset;
+      const startY = fromNode.y + uy * fromOffset;
+      const endX = toNode.x - ux * toOffset;
+      const endY = toNode.y - uy * toOffset;
+
+      ctx.save();
+
+      const color = isCycle ? this.theme.edgeCycle : defaultColor;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = isCycle ? 2.5 : 1.8;
+
+      if (isCycle) {
+        ctx.setLineDash([7, 4]);
+        ctx.lineDashOffset = -this.animTime * 14;
+      } else {
+        ctx.setLineDash([]);
+      }
+
       ctx.beginPath();
-      for (let x = 0; x < w; x += step) {
-        ctx.moveTo(x, 0); ctx.lineTo(x, h);
-      }
-      for (let y = 0; y < h; y += step) {
-        ctx.moveTo(0, y); ctx.lineTo(w, y);
-      }
+      ctx.moveTo(startX, startY);
+      ctx.quadraticCurveTo(mx, my, endX, endY);
       ctx.stroke();
 
-      // Subtle architectural frame around the canvas
-      ctx.strokeStyle = '#e2e8f0';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+      // Arrow head
+      const arrowLen = isCycle ? 11 : 9;
+      const angle = Math.atan2(endY - my, endX - mx);
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(endX, endY);
+      ctx.lineTo(
+        endX - arrowLen * Math.cos(angle - Math.PI / 6),
+        endY - arrowLen * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.lineTo(
+        endX - arrowLen * Math.cos(angle + Math.PI / 6),
+        endY - arrowLen * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.closePath();
+      ctx.fill();
+
+      // Label Plaque
+      if (label) {
+        ctx.font = '600 10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(label);
+        const padX = 5, padY = 2;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(mx - metrics.width / 2 - padX, my - 6 - padY, metrics.width + padX * 2, 12 + padY * 2);
+        ctx.strokeStyle = isCycle ? '#991b1b' : '#cbd5e1';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mx - metrics.width / 2 - padX, my - 6 - padY, metrics.width + padX * 2, 12 + padY * 2);
+
+        ctx.fillStyle = isCycle ? '#991b1b' : '#1e293b';
+        ctx.fillText(label, mx, my);
+      }
 
       ctx.restore();
     }
 
+    /**
+     * Directed edge for WFG
+     */
     drawDirectedEdge(ctx, fromNode, toNode, label, isCycleEdge) {
       const radius = 30;
       const dx = toNode.x - fromNode.x;
@@ -271,7 +603,7 @@
         ctx.setLineDash([7, 4]);
         ctx.lineDashOffset = -this.animTime * 14;
       } else {
-        ctx.strokeStyle = this.theme.edgeNormal;
+        ctx.strokeStyle = this.theme.edgeWfg;
         ctx.lineWidth = 1.75;
         ctx.setLineDash([]);
       }
@@ -286,7 +618,7 @@
       const angle = Math.atan2(endY - my, endX - mx);
 
       ctx.setLineDash([]);
-      ctx.fillStyle = isCycleEdge ? this.theme.edgeCycle : this.theme.edgeNormal;
+      ctx.fillStyle = isCycleEdge ? this.theme.edgeCycle : this.theme.edgeWfg;
       ctx.beginPath();
       ctx.moveTo(endX, endY);
       ctx.lineTo(
@@ -332,7 +664,7 @@
       // Formal concentric indicator for deadlocked node
       if (isDeadlocked) {
         const pulse = (Math.sin(this.animTime * 3) + 1) * 0.5;
-        ctx.strokeStyle = 'rgba(153, 27, 27, ' + (0.4 + pulse * 0.5) + ')';
+        ctx.strokeStyle = `rgba(153, 27, 27, ${0.4 + pulse * 0.5})`;
         ctx.lineWidth = 1.75;
         ctx.setLineDash([5, 3]);
         ctx.beginPath();
@@ -381,20 +713,42 @@
       ctx.restore();
     }
 
-    drawTooltip(ctx, proc, state) {
-      const idx = state.processes.findIndex(p => p.id === proc.id);
-      if (idx === -1) return;
+    drawTooltip(ctx, node, state) {
+      const lines = [];
 
-      const alloc = state.allocation[idx] || [];
-      const req = state.request[idx] || [];
-      const isDeadlocked = state.deadlockedProcessIds.includes(proc.id);
+      if (node.nodeType === 'resource') {
+        const res = state.resources.find(r => r.id === node.id) || node;
+        const holders = [];
+        const requesters = [];
 
-      const lines = [
-        `${proc.name} [${isDeadlocked ? 'DEADLOCKED' : proc.status}]`,
-        `Holding Vector: [${alloc.join(', ')}]`,
-        `Pending Claim: [${req.join(', ')}]`,
-        `Drag node to adjust topology`
-      ];
+        state.processes.forEach((p, pIdx) => {
+          if (p.status === 'TERMINATED') return;
+          const h = (state.allocation[pIdx] && state.allocation[pIdx][res.id]) || 0;
+          if (h > 0) holders.push(`${p.name} (${h})`);
+          const r = (state.request[pIdx] && state.request[pIdx][res.id]) || 0;
+          if (r > 0) requesters.push(`${p.name} (${r})`);
+        });
+
+        lines.push(`Resource: ${res.name} (Type)`);
+        lines.push(`Total Capacity: ${res.instances} instance(s)`);
+        lines.push(`Available (Free): ${res.available}`);
+        lines.push(`Held By: ${holders.length > 0 ? holders.join(', ') : 'None'}`);
+        lines.push(`Requested By: ${requesters.length > 0 ? requesters.join(', ') : 'None'}`);
+        lines.push(`Drag resource box to reposition`);
+      } else {
+        const proc = node;
+        const idx = state.processes.findIndex(p => p.id === proc.id);
+        if (idx === -1) return;
+
+        const alloc = state.allocation[idx] || [];
+        const req = state.request[idx] || [];
+        const isDeadlocked = state.deadlockedProcessIds.includes(proc.id);
+
+        lines.push(`${proc.name} [${isDeadlocked ? 'DEADLOCKED' : proc.status}]`);
+        lines.push(`Holding: [${alloc.map((v, i) => `${state.resourceNames[i]}:${v}`).join(', ')}]`);
+        lines.push(`Requests: [${req.map((v, i) => `${state.resourceNames[i]}:${v}`).join(', ')}]`);
+        lines.push(`Drag process circle to reposition`);
+      }
 
       ctx.font = '11px "Inter", sans-serif';
       let maxW = 0;
@@ -406,16 +760,16 @@
       const pad = 9;
       const boxW = maxW + pad * 2;
       const boxH = lines.length * 16 + pad * 2;
-      let tx = proc.x + 35;
-      let ty = proc.y - 10;
+      let tx = node.x + 35;
+      let ty = node.y - 10;
 
-      if (tx + boxW > this.logicalWidth) tx = proc.x - boxW - 35;
+      if (tx + boxW > this.logicalWidth) tx = node.x - boxW - 35;
       if (ty + boxH > this.logicalHeight) ty = this.logicalHeight - boxH - 10;
       if (ty < 10) ty = 10;
 
       ctx.save();
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = isDeadlocked ? '#991b1b' : '#94a3b8';
+      ctx.strokeStyle = '#64748b';
       ctx.lineWidth = 1.25;
       ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
       ctx.shadowBlur = 8;
@@ -425,7 +779,7 @@
       ctx.stroke();
 
       lines.forEach((line, i) => {
-        ctx.fillStyle = i === 0 ? (isDeadlocked ? '#991b1b' : '#0f294a') : '#334155';
+        ctx.fillStyle = i === 0 ? '#0f294a' : '#334155';
         ctx.font = i === 0 ? 'bold 12px "Inter", sans-serif' : '10px "JetBrains Mono", monospace';
         ctx.textAlign = 'left';
         ctx.fillText(line, tx + pad, ty + pad + 12 + i * 16);
@@ -476,6 +830,117 @@
       const metricActive = document.getElementById('metric-active-count');
       if (metricDeadlocked) metricDeadlocked.textContent = state.deadlockedProcessIds.length;
       if (metricActive) metricActive.textContent = state.processes.filter(p => p.status !== 'TERMINATED').length;
+
+      // Also update the description below the graph
+      this.updateGraphInterpretation();
+    }
+
+    /**
+     * Updates Figure 1.1: Live Short Description Below the Graph
+     * Formats exact state sentences: "P1 holds R1 and requests an instance to R2"
+     */
+    updateGraphInterpretation() {
+      const state = root.DeadlockState?.getSnapshot();
+      if (!state) return;
+
+      const listElem = document.getElementById('interpretation-list');
+      const summaryElem = document.getElementById('interpretation-summary');
+      const tagElem = document.getElementById('interpretation-status-tag');
+      if (!listElem || !summaryElem) return;
+
+      const { processes, resourceNames, allocation, request, deadlockedProcessIds, detectedCycles } = state;
+
+      const sentences = [];
+
+      processes.forEach((proc, pIdx) => {
+        if (proc.status === 'TERMINATED') {
+          sentences.push(`<strong>${proc.name}</strong> has finished and terminated (released all resources).`);
+          return;
+        }
+
+        // Held resources
+        const heldParts = [];
+        (allocation[pIdx] || []).forEach((count, rIdx) => {
+          if (count > 0) {
+            heldParts.push(`${count} instance${count > 1 ? 's' : ''} of <strong>${resourceNames[rIdx]}</strong>`);
+          }
+        });
+
+        // Requested resources
+        const reqParts = [];
+        (request[pIdx] || []).forEach((count, rIdx) => {
+          if (count > 0) {
+            reqParts.push(`${count} instance${count > 1 ? 's' : ''} of <strong>${resourceNames[rIdx]}</strong>`);
+          }
+        });
+
+        let sentence = '';
+        if (heldParts.length > 0 && reqParts.length > 0) {
+          sentence = `<strong>${proc.name}</strong> holds ${heldParts.join(', ')} and requests ${reqParts.join(', ')}.`;
+        } else if (heldParts.length > 0) {
+          sentence = `<strong>${proc.name}</strong> holds ${heldParts.join(', ')} (no pending requests).`;
+        } else if (reqParts.length > 0) {
+          sentence = `<strong>${proc.name}</strong> holds no resources and requests ${reqParts.join(', ')}.`;
+        } else {
+          sentence = `<strong>${proc.name}</strong> is idle (holds no resources and has no pending claims).`;
+        }
+
+        const isDeadlocked = deadlockedProcessIds.includes(proc.id);
+        if (isDeadlocked) {
+          sentence += ` <span class="badge badge-crimson-inline">BLOCKED IN DEADLOCK</span>`;
+        } else if (proc.status === 'WAITING') {
+          sentence += ` <span class="badge badge-amber-inline">WAITING</span>`;
+        } else {
+          sentence += ` <span class="badge badge-green-inline">READY / RUNNING</span>`;
+        }
+
+        sentences.push(sentence);
+      });
+
+      listElem.innerHTML = sentences.map(s => `<li class="interpretation-item">${s}</li>`).join('');
+
+      // Overall interpretation summary
+      const isDeadlocked = deadlockedProcessIds.length > 0;
+      if (tagElem) {
+        tagElem.className = `interpretation-status-tag ${isDeadlocked ? 'tag-deadlocked' : 'tag-safe'}`;
+        tagElem.textContent = isDeadlocked ? 'DEADLOCK CONFIRMED' : 'SAFE CONCURRENCY';
+      }
+
+      if (isDeadlocked) {
+        let cycleText = '';
+        if (detectedCycles && detectedCycles.length > 0) {
+          cycleText = detectedCycles.map(c => c.map(id => {
+            const p = processes.find(pr => pr.id === id);
+            return p ? p.name : `P${id}`;
+          }).join(' → ')).join(' | ');
+        } else {
+          cycleText = deadlockedProcessIds.map(id => `P${id}`).join(' ⇄ ');
+        }
+
+        summaryElem.className = 'interpretation-summary summary-deadlock';
+        summaryElem.innerHTML = `
+          <strong>Conclusion:</strong> Circular wait detected [<code>${cycleText}</code>]. 
+          The processes are waiting on resources held by each other; neither can proceed without intervention.
+        `;
+      } else {
+        const hasPending = processes.some((p, pIdx) => 
+          (request[pIdx] || []).some((req, rIdx) => req > (state.available[rIdx] || 0))
+        );
+
+        if (hasPending) {
+          summaryElem.className = 'interpretation-summary summary-risk';
+          summaryElem.innerHTML = `
+            <strong>Conclusion:</strong> Resource contention warning. Some processes are waiting for resources currently held, 
+            but no circular wait exists. Schedulable order preserved.
+          `;
+        } else {
+          summaryElem.className = 'interpretation-summary summary-safe';
+          summaryElem.innerHTML = `
+            <strong>Conclusion:</strong> Stable state. All active processes hold sufficient capacity or have free available resources 
+            to execute and release without deadlock.
+          `;
+        }
+      }
     }
 
     /**

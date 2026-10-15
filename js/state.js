@@ -22,9 +22,16 @@
       this.available = [3, 3, 2]; // Vector m
 
       this.processes = [
-        { id: 0, name: 'P0', priority: 5, timestamp: Date.now() - 12000, rollbackCount: 0, status: 'READY', x: 180, y: 120 },
-        { id: 1, name: 'P1', priority: 7, timestamp: Date.now() - 8000, rollbackCount: 0, status: 'READY', x: 380, y: 120 },
-        { id: 2, name: 'P2', priority: 3, timestamp: Date.now() - 4000, rollbackCount: 0, status: 'READY', x: 280, y: 280 }
+        { id: 0, name: 'P0', priority: 5, timestamp: Date.now() - 12000, rollbackCount: 0, status: 'READY', x: 160, y: 250 },
+        { id: 1, name: 'P1', priority: 7, timestamp: Date.now() - 8000, rollbackCount: 0, status: 'READY', x: 300, y: 250 },
+        { id: 2, name: 'P2', priority: 3, timestamp: Date.now() - 4000, rollbackCount: 0, status: 'READY', x: 440, y: 250 }
+      ];
+
+      // Resource node positions for RAG rendering & interaction
+      this.resources = [
+        { id: 0, name: 'R0', x: 160, y: 95, instances: 3 },
+        { id: 1, name: 'R1', x: 300, y: 95, instances: 3 },
+        { id: 2, name: 'R2', x: 440, y: 95, instances: 2 }
       ];
 
       // Allocation matrix n x m
@@ -74,9 +81,28 @@
      * Returns an immutable deep clone of the current state
      */
     getSnapshot() {
+      // Calculate total instances per resource (Available + sum of Allocation)
+      const computedResources = this.resourceNames.map((name, rIdx) => {
+        let heldSum = 0;
+        for (let i = 0; i < this.processes.length; i++) {
+          heldSum += (this.allocation[i] && this.allocation[i][rIdx]) || 0;
+        }
+        const total = (this.available[rIdx] || 0) + heldSum;
+        const existing = (this.resources && this.resources[rIdx]) || {};
+        return {
+          id: rIdx,
+          name: name,
+          instances: total,
+          available: this.available[rIdx] || 0,
+          x: existing.x !== undefined ? existing.x : 200 + rIdx * 130,
+          y: existing.y !== undefined ? existing.y : 95
+        };
+      });
+
       return {
         resourceNames: [...this.resourceNames],
         available: [...this.available],
+        resources: computedResources,
         allocation: this.allocation.map(row => [...row]),
         request: this.request.map(row => [...row]),
         processes: this.processes.map(p => ({ ...p })),
@@ -118,10 +144,30 @@
       this.allocation = snapshot.allocation.map(r => [...r]);
       this.request = snapshot.request.map(r => [...r]);
       this.processes = snapshot.processes.map(p => ({ ...p }));
-      this.mode = snapshot.mode || 'multi';
+      this.mode = snapshot.mode || 'single';
       this.deadlockedProcessIds = [...(snapshot.deadlockedProcessIds || [])];
       this.detectedCycles = (snapshot.detectedCycles || []).map(c => [...c]);
       this.lastVictimInfo = snapshot.lastVictimInfo ? { ...snapshot.lastVictimInfo } : null;
+
+      if (snapshot.resources && snapshot.resources.length === this.resourceNames.length) {
+        this.resources = snapshot.resources.map(r => ({ ...r }));
+      } else {
+        // Auto-generate resource objects
+        this.resources = this.resourceNames.map((name, rIdx) => {
+          let heldSum = 0;
+          for (let i = 0; i < this.processes.length; i++) {
+            heldSum += (this.allocation[i] && this.allocation[i][rIdx]) || 0;
+          }
+          return {
+            id: rIdx,
+            name: name,
+            instances: (this.available[rIdx] || 0) + heldSum,
+            available: this.available[rIdx] || 0,
+            x: 180 + rIdx * 140,
+            y: 95
+          };
+        });
+      }
 
       this.notify('snapshotLoaded');
     }
@@ -289,9 +335,20 @@
       this.pushHistory();
       const rIdx = this.resourceNames.length;
       const rName = name || `R${rIdx}`;
+      const avail = Math.max(0, initialAvailable);
 
       this.resourceNames.push(rName);
-      this.available.push(Math.max(0, initialAvailable));
+      this.available.push(avail);
+
+      if (!this.resources) this.resources = [];
+      this.resources.push({
+        id: rIdx,
+        name: rName,
+        instances: avail,
+        available: avail,
+        x: Math.round(100 + (rIdx % 5) * 120),
+        y: 95
+      });
 
       for (let i = 0; i < this.processes.length; i++) {
         this.allocation[i].push(0);
@@ -311,6 +368,7 @@
 
       const rName = this.resourceNames.pop();
       this.available.pop();
+      if (this.resources) this.resources.pop();
 
       for (let i = 0; i < this.processes.length; i++) {
         this.allocation[i].pop();
@@ -329,6 +387,52 @@
       if (p) {
         p.x = x;
         p.y = y;
+      }
+    }
+
+    /**
+     * Update resource node visual coordinates (for interactive drag)
+     */
+    updateResourcePosition(idOrIdx, x, y) {
+      if (!this.resources) return;
+      const r = typeof idOrIdx === 'number'
+        ? (this.resources.find(res => res.id === idOrIdx) || this.resources[idOrIdx])
+        : this.resources.find(res => res.name === idOrIdx);
+      if (r) {
+        r.x = x;
+        r.y = y;
+      }
+    }
+
+    /**
+     * Auto-center all nodes neatly in the viewport based on logical canvas dimensions
+     */
+    autoCenterLayout(width = 600, height = 360) {
+      const W = Math.max(400, width);
+      const H = Math.max(280, height);
+      const n = this.processes.length;
+      const m = this.resourceNames.length;
+
+      // Arrange Resources along top row
+      if (this.resources) {
+        const yR = Math.round(H * 0.26);
+        for (let j = 0; j < m; j++) {
+          const xR = Math.round((W / (m + 1)) * (j + 1));
+          if (!this.resources[j]) {
+            this.resources[j] = { id: j, name: this.resourceNames[j], instances: this.available[j] || 1, available: this.available[j] || 1, x: xR, y: yR };
+          } else {
+            this.resources[j].x = Math.max(50, Math.min(W - 50, xR));
+            this.resources[j].y = Math.max(45, Math.min(H - 45, yR));
+          }
+        }
+      }
+
+      // Arrange Processes along bottom row
+      const yP = Math.round(H * 0.74);
+      for (let i = 0; i < n; i++) {
+        const xP = Math.round((W / (n + 1)) * (i + 1));
+        this.processes[i].x = Math.max(50, Math.min(W - 50, xP));
+        this.processes[i].y = Math.max(45, Math.min(H - 45, yP));
       }
     }
 

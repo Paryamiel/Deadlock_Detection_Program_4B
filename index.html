@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Deadlock Detection & Analysis System: Dual algorithmic evaluation for pre-allocation risk verification and wait-for graph cycle detection in concurrent systems.">
+  <meta name="description" content="Deadlock Detection & Analysis System: Dual algorithmic evaluation for pre-allocation risk verification, interactive Resource Allocation Graph, and circular wait cycle detection in concurrent systems.">
   <title>Deadlock Detection &amp; Analysis System — Concurrency Laboratory</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -14,7 +14,6 @@
       <div class="brand-icon" aria-hidden="true">
         <!-- University / Formal Academic Seal SVG -->
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <!-- Classical crest / open book & graph node emblem -->
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
           <circle cx="12" cy="8" r="1.5" fill="currentColor"/>
@@ -54,171 +53,390 @@
     </div>
   </header>
 
+  <!-- Top Navigation Tabs (Dashboard vs Instructions) -->
+  <nav class="app-nav-tabs" aria-label="Main Navigation">
+    <div class="nav-tabs-container">
+      <button type="button" class="nav-tab-btn active" id="tab-btn-dashboard" data-tab="dashboard">
+        <span class="tab-btn-icon">📊</span>
+        <span>Simulator Dashboard</span>
+      </button>
+      <button type="button" class="nav-tab-btn" id="tab-btn-instructions" data-tab="instructions">
+        <span class="tab-btn-icon">📘</span>
+        <span>Instructions &amp; Beginner's Guide</span>
+        <span class="guide-pill">How To Use</span>
+      </button>
+    </div>
+  </nav>
+
   <!-- Main Container -->
   <main class="dashboard-container">
-    <!-- Laboratory Benchmarks & Concurrency Case Studies -->
-    <section class="scenario-bar" aria-label="Laboratory Benchmark Scenarios">
-      <div class="section-heading-wrap">
-        <span class="section-numeral">§ 1.0</span>
-        <span class="scenario-bar-title">Laboratory Benchmark Scenarios &amp; Concurrency Case Studies</span>
-      </div>
-      <div class="scenario-cards-grid">
-        <button type="button" class="preset-btn active" id="btn-preset-safe">
-          <span class="preset-tag">CASE I</span>
-          <div class="preset-text">
-            <strong>Stable Concurrency (Safe State)</strong>
-            <small>Normal execution. System holds adequate capacity to satisfy all prospective resource requests.</small>
-          </div>
-        </button>
-
-        <button type="button" class="preset-btn" id="btn-preset-risk">
-          <span class="preset-tag">CASE II</span>
-          <div class="preset-text">
-            <strong>Pre-Deadlock Risk (Impending Contention)</strong>
-            <small>Resource contention warning. Evaluate prospective requests via hypothesis testing before granting.</small>
-          </div>
-        </button>
-
-        <button type="button" class="preset-btn" id="btn-preset-deadlock">
-          <span class="preset-tag">CASE III</span>
-          <div class="preset-text">
-            <strong>Active Deadlock (Circular Dependency)</strong>
-            <small>Circular wait condition confirmed. Processes P0 and P1 are mutually locked in a cycle.</small>
-          </div>
-        </button>
-      </div>
-    </section>
-
-    <!-- Two-Column Primary Layout -->
-    <div class="dashboard-grid">
-      <!-- Left Column: Visual Graph & Formal State Assessment -->
-      <div class="grid-column">
-        <!-- Canvas Card -->
-        <section class="dashboard-panel" aria-label="Wait-For Graph Visualizer">
-          <div class="panel-header">
-            <h3><span class="panel-section-ref">Figure 1.0</span> Topological Dependency Graph (Wait-For Graph)</h3>
-            <span class="badge badge-info">Interactive State Topology</span>
-          </div>
-
-          <div class="canvas-wrapper">
-            <canvas id="wfg-canvas" width="600" height="360" aria-label="Wait-For Graph Canvas"></canvas>
-            <div class="canvas-floating-info">
-              <div class="canvas-hint">Directed edge P<sub>i</sub> &rarr; P<sub>j</sub> denotes process P<sub>i</sub> blocked awaiting resources held by P<sub>j</sub>. Crimson path denotes circular deadlock.</div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Formal State Assessment Card -->
-        <section class="explanation-card" aria-label="Formal State Assessment">
-          <div class="explanation-header">
-            <span class="phase-tag phase-safe" id="detection-phase-indicator">NORMAL OPERATION (SAFE)</span>
-            <span class="help-title">Formal System State Assessment</span>
-          </div>
-          <h4 id="explanation-headline" class="explanation-title">System is in a Stable Safe State</h4>
-          <p id="explanation-details" class="explanation-body">
-            All processes can obtain needed resources and proceed to completion. No circular dependency exists.
-          </p>
-        </section>
-      </div>
-
-      <!-- Right Column: Hypothesis Testing & Resource Matrix Table -->
-      <div class="grid-column">
-        <!-- Predictive Request Simulator (Detect Prior to Deadlock) -->
-        <section class="dashboard-panel predictor-panel" aria-label="Predictive Request Simulator">
-          <div class="panel-header">
-            <h3><span class="panel-section-ref">Experiment 1</span> Pre-Allocation Safety Test (Predictive Verification)</h3>
-            <span class="badge badge-amber">Pre-Deadlock Check</span>
-          </div>
-
-          <div class="predictor-body">
-            <p class="predictor-intro">
-              Simulate hypothetical claim <em>Request(P<sub>i</sub>, R<sub>j</sub>)</em> prior to scheduler allocation. Determines whether approving the allocation preserves system schedulability or induces deadlock:
-            </p>
-
-            <div class="predictor-controls">
-              <div class="predictor-field">
-                <label for="predict-process-select">Process P<sub>i</sub>:</label>
-                <select id="predict-process-select" class="custom-select"></select>
-              </div>
-
-              <div class="predictor-field">
-                <label for="predict-resource-select">Resource Claim R<sub>j</sub>:</label>
-                <select id="predict-resource-select" class="custom-select"></select>
-              </div>
-
-              <div class="predictor-field">
-                <label for="predict-amount-input">Quantity (k):</label>
-                <input type="number" id="predict-amount-input" min="1" max="10" value="1" class="custom-number-input">
-              </div>
-
-              <button type="button" class="btn btn-primary" id="btn-predict-request">
-                <span>Evaluate Request Safety</span>
-              </button>
-            </div>
-
-            <!-- Prediction Result Box (Appears when tested) -->
-            <div id="predict-result-box" class="prediction-result-box" style="display: none;"></div>
-
-            <div style="margin-top: 0.5rem;">
-              <button type="button" class="btn btn-warning" id="btn-apply-tested-request" style="display: none;">
-                <span>Commit Allocation to State</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Process & Resource Matrix Table (Table 1.0) -->
-        <section class="dashboard-panel" aria-label="Current System Resources">
-          <div class="panel-header">
-            <h3><span class="panel-section-ref">Table 1.0</span> Process Allocation &amp; Request Matrices</h3>
-            <div class="panel-actions">
-              <button type="button" class="btn btn-sm" id="btn-add-proc-simple" title="Register a new process">
-                <span>+ Process</span>
-              </button>
-              <button type="button" class="btn btn-sm" id="btn-add-res-simple" title="Register a new resource type">
-                <span>+ Resource</span>
-              </button>
-            </div>
-          </div>
-
-          <div id="matrix-grids-container">
-            <!-- Dynamically populated by renderer -->
-          </div>
-
-          <!-- Quick Action Buttons -->
-          <div class="quick-actions-strip">
-            <button type="button" class="btn btn-primary" id="btn-run-detect" title="Execute cycle detection">
-              <span class="btn-glyph">&#9658;</span> Execute Cycle Detection
-            </button>
-            <button type="button" class="btn btn-danger" id="btn-break-deadlock" title="Preempt contested resources to resolve cycle">
-              <span class="btn-glyph">&#9889;</span> Preempt Contested Resource
-            </button>
-            <button type="button" class="btn btn-secondary" id="btn-reset-state" title="Reset state to initial safe setup">
-              <span class="btn-glyph">&#8635;</span> Reset Benchmark
-            </button>
-          </div>
-        </section>
-      </div>
-    </div>
-
-    <!-- Bottom: Algorithmic Execution Journal & Audit Log -->
-    <section class="diagnostics-panel" aria-label="Event Log">
-      <div class="terminal-header">
-        <div class="terminal-title">
-          <span class="status-dot"></span>
-          <span>ALGORITHMIC EXECUTION JOURNAL &amp; AUDIT LOG</span>
+    <!-- VIEW 1: SIMULATOR DASHBOARD -->
+    <div id="view-dashboard" class="app-view active">
+      <!-- Laboratory Benchmarks & Concurrency Case Studies -->
+      <section class="scenario-bar" aria-label="Laboratory Benchmark Scenarios">
+        <div class="section-heading-wrap">
+          <span class="section-numeral">§ 1.0</span>
+          <span class="scenario-bar-title">Laboratory Benchmark Scenarios &amp; Concurrency Case Studies</span>
         </div>
-        <div class="panel-actions">
-          <button type="button" class="btn btn-sm btn-secondary" id="btn-clear-logs">
-            <span>Clear Journal</span>
+        <div class="scenario-cards-grid">
+          <button type="button" class="preset-btn active" id="btn-preset-safe">
+            <span class="preset-tag">CASE I</span>
+            <div class="preset-text">
+              <strong>Stable Concurrency (Safe State)</strong>
+              <small>Normal execution. System holds adequate capacity to satisfy all prospective resource requests.</small>
+            </div>
+          </button>
+
+          <button type="button" class="preset-btn" id="btn-preset-risk">
+            <span class="preset-tag">CASE II</span>
+            <div class="preset-text">
+              <strong>Pre-Deadlock Risk (Impending Contention)</strong>
+              <small>Resource contention warning. Evaluate prospective requests via hypothesis testing before granting.</small>
+            </div>
+          </button>
+
+          <button type="button" class="preset-btn" id="btn-preset-deadlock">
+            <span class="preset-tag">CASE III</span>
+            <div class="preset-text">
+              <strong>Active Deadlock (Circular Dependency)</strong>
+              <small>Circular wait condition confirmed. Processes P0 and P1 are mutually locked in a cycle.</small>
+            </div>
+          </button>
+
+          <button type="button" class="preset-btn" id="btn-preset-random">
+            <span class="preset-tag preset-tag-random">RANDOM</span>
+            <div class="preset-text">
+              <strong>Randomized Scenario</strong>
+              <small>Generates a dynamic random configuration of processes &amp; resources with auto-centered layout.</small>
+            </div>
           </button>
         </div>
+      </section>
+
+      <!-- Two-Column Primary Layout -->
+      <div class="dashboard-grid">
+        <!-- Left Column: Visual Graph & Formal State Assessment -->
+        <div class="grid-column">
+          <!-- Canvas Card -->
+          <section class="dashboard-panel" aria-label="Resource Allocation Graph Visualizer">
+            <div class="panel-header">
+              <h3><span class="panel-section-ref">Figure 1.0</span> Interactive Dependency Graph</h3>
+              <div class="canvas-header-actions">
+                <button type="button" class="btn btn-sm btn-secondary" id="btn-toggle-graph-mode" title="Toggle between Resource Allocation Graph and Wait-For Graph">
+                  <span>View: <strong>Resource Allocation (RAG)</strong></span>
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" id="btn-center-graph" title="Reset layout to centered view">
+                  <span>⛶ Center View</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="canvas-wrapper">
+              <canvas id="wfg-canvas" width="640" height="360" aria-label="Dependency Graph Canvas"></canvas>
+              <div class="canvas-floating-info">
+                <div class="canvas-hint">
+                  <strong>Interaction:</strong> Click &amp; drag any <strong>Process (circle)</strong> or <strong>Resource (box)</strong> to reposition. Arrows: <em>Resource &rarr; Process</em> (holds), <em>Process &rarr; Resource</em> (requests).
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Figure 1.1: Live Graph Interpretation & Flow Analysis (Requested Description) -->
+          <section class="graph-interpretation-panel" id="graph-interpretation-panel" aria-label="Graph Interpretation">
+            <div class="interpretation-header">
+              <div class="interpretation-title">
+                <span class="panel-section-ref">Figure 1.1</span>
+                <strong>Live Graph Interpretation &amp; Flow Analysis</strong>
+              </div>
+              <span class="interpretation-status-tag tag-safe" id="interpretation-status-tag">SAFE STATE</span>
+            </div>
+
+            <div class="interpretation-content">
+              <p class="interpretation-lead">Plain-English summary of current allocations and active requests:</p>
+              <ul class="interpretation-list" id="interpretation-list">
+                <!-- Dynamically populated, e.g. "P1 holds R1 and requests an instance to R2" -->
+              </ul>
+              <div class="interpretation-summary summary-safe" id="interpretation-summary">
+                <!-- Dynamically populated conclusion -->
+              </div>
+            </div>
+          </section>
+
+          <!-- Formal State Assessment Card -->
+          <section class="explanation-card" aria-label="Formal State Assessment">
+            <div class="explanation-header">
+              <span class="phase-tag phase-safe" id="detection-phase-indicator">NORMAL OPERATION (SAFE)</span>
+              <span class="help-title">Formal System State Assessment</span>
+            </div>
+            <h4 id="explanation-headline" class="explanation-title">System is in a Stable Safe State</h4>
+            <p id="explanation-details" class="explanation-body">
+              All processes can obtain needed resources and proceed to completion. No circular dependency exists.
+            </p>
+          </section>
+        </div>
+
+        <!-- Right Column: Hypothesis Testing & Resource Matrix Table -->
+        <div class="grid-column">
+          <!-- Predictive Request Simulator (Detect Prior to Deadlock) -->
+          <section class="dashboard-panel predictor-panel" aria-label="Predictive Request Simulator">
+            <div class="panel-header">
+              <h3><span class="panel-section-ref">Experiment 1</span> Pre-Allocation Safety Test (Predictive Verification)</h3>
+              <span class="badge badge-amber">Pre-Deadlock Check</span>
+            </div>
+
+            <div class="predictor-body">
+              <p class="predictor-intro">
+                Simulate hypothetical claim <em>Request(P<sub>i</sub>, R<sub>j</sub>)</em> prior to scheduler allocation. Determines whether approving the allocation preserves system schedulability or induces deadlock:
+              </p>
+
+              <div class="predictor-controls">
+                <div class="predictor-field">
+                  <label for="predict-process-select">Process P<sub>i</sub>:</label>
+                  <select id="predict-process-select" class="custom-select"></select>
+                </div>
+
+                <div class="predictor-field">
+                  <label for="predict-resource-select">Resource Claim R<sub>j</sub>:</label>
+                  <select id="predict-resource-select" class="custom-select"></select>
+                </div>
+
+                <div class="predictor-field">
+                  <label for="predict-amount-input">Quantity (k):</label>
+                  <input type="number" id="predict-amount-input" min="1" max="10" value="1" class="custom-number-input">
+                </div>
+
+                <button type="button" class="btn btn-primary" id="btn-predict-request">
+                  <span>Evaluate Request Safety</span>
+                </button>
+              </div>
+
+              <!-- Prediction Result Box (Appears when tested) -->
+              <div id="predict-result-box" class="prediction-result-box" style="display: none;"></div>
+
+              <div style="margin-top: 0.5rem;">
+                <button type="button" class="btn btn-warning" id="btn-apply-tested-request" style="display: none;">
+                  <span>Commit Allocation to State</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Process & Resource Matrix Table (Table 1.0) -->
+          <section class="dashboard-panel" aria-label="Current System Resources">
+            <div class="panel-header">
+              <h3><span class="panel-section-ref">Table 1.0</span> Process Allocation &amp; Request Matrices</h3>
+              <div class="panel-actions">
+                <button type="button" class="btn btn-sm" id="btn-add-proc-simple" title="Register a new process">
+                  <span>+ Process</span>
+                </button>
+                <button type="button" class="btn btn-sm" id="btn-add-res-simple" title="Register a new resource type">
+                  <span>+ Resource</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="matrix-grids-container">
+              <!-- Dynamically populated by renderer -->
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="quick-actions-strip">
+              <button type="button" class="btn btn-primary" id="btn-run-detect" title="Execute cycle detection">
+                <span class="btn-glyph">&#9658;</span> Execute Cycle Detection
+              </button>
+              <button type="button" class="btn btn-danger" id="btn-break-deadlock" title="Preempt contested resources to resolve cycle">
+                <span class="btn-glyph">&#9889;</span> Preempt Contested Resource
+              </button>
+              <button type="button" class="btn btn-secondary" id="btn-reset-state" title="Reset state to initial preset setup">
+                <span class="btn-glyph">&#8635;</span> Reset Preset
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
 
-      <div class="terminal-stream" id="diagnostics-log-stream" role="log" aria-live="polite">
-        <!-- Live streamed journal items -->
-      </div>
-    </section>
+      <!-- Bottom: Algorithmic Execution Journal & Audit Log -->
+      <section class="diagnostics-panel" aria-label="Event Log">
+        <div class="terminal-header">
+          <div class="terminal-title">
+            <span class="status-dot"></span>
+            <span>ALGORITHMIC EXECUTION JOURNAL &amp; AUDIT LOG</span>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-sm btn-secondary" id="btn-clear-logs">
+              <span>Clear Journal</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="terminal-stream" id="diagnostics-log-stream" role="log" aria-live="polite">
+          <!-- Live streamed journal items -->
+        </div>
+      </section>
+    </div>
+
+    <!-- VIEW 2: BEGINNER INSTRUCTIONS & HOW TO USE TAB -->
+    <div id="view-instructions" class="app-view" style="display: none;">
+      <section class="instructions-container">
+        <!-- Hero Banner -->
+        <div class="instructions-hero">
+          <div class="instructions-hero-badge">BEGINNER-FRIENDLY GUIDE</div>
+          <h2>How to Use the Deadlock Detection &amp; Analysis Laboratory</h2>
+          <p>
+            Welcome to the Concurrency Laboratory. This interactive guide explains operating system deadlocks in simple, clear terms, shows you how to read the visual graph, and teaches you how to test and resolve deadlocks step-by-step.
+          </p>
+        </div>
+
+        <!-- 3-Column Concept Cards -->
+        <div class="instructions-cards-grid">
+          <!-- Card 1: What is Deadlock -->
+          <div class="instruction-card">
+            <div class="instruction-card-header">
+              <span class="card-icon">🚦</span>
+              <h3>1. What is a Deadlock?</h3>
+            </div>
+            <p>
+              Imagine a <strong>4-way road intersection</strong> where four cars arrive at the exact same moment. Each car moves forward slightly and blocks the next car. Nobody can move, and nobody can back up. That is a <strong>Deadlock</strong>.
+            </p>
+            <div class="concept-callout">
+              <strong>In Operating Systems:</strong>
+              Two or more programs (Processes) get stuck forever because each program holds a resource that another program needs to finish.
+            </div>
+          </div>
+
+          <!-- Card 2: Processes vs Resources -->
+          <div class="instruction-card">
+            <div class="instruction-card-header">
+              <span class="card-icon">🧩</span>
+              <h3>2. Reading the Graph Symbols</h3>
+            </div>
+            <ul class="symbol-list">
+              <li>
+                <span class="symbol-badge circle-badge">P0</span>
+                <div>
+                  <strong>Circle = Process:</strong> An active program or thread running in the computer (e.g. <code>P0, P1, P2</code>).
+                </div>
+              </li>
+              <li>
+                <span class="symbol-badge box-badge">R0</span>
+                <div>
+                  <strong>Rectangle = Resource:</strong> An asset that processes need, such as a printer, file lock, or memory (e.g. <code>R0, R1</code>).
+                </div>
+              </li>
+              <li>
+                <span class="arrow-demo arrow-hold">&rarr;</span>
+                <div>
+                  <strong>Resource &rarr; Process Arrow:</strong> The process is currently <strong>holding</strong> (owning) an instance of this resource.
+                </div>
+              </li>
+              <li>
+                <span class="arrow-demo arrow-req">&rarr;</span>
+                <div>
+                  <strong>Process &rarr; Resource Arrow:</strong> The process is <strong>requesting</strong> and waiting for this resource.
+                </div>
+              </li>
+              <li>
+                <span class="arrow-demo arrow-cycle">&#8635;</span>
+                <div>
+                  <strong>Crimson Pulsing Arrows:</strong> A <strong>circular wait cycle</strong>! This confirmed loop means the system is in an active deadlock.
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Card 3: Prior vs During -->
+          <div class="instruction-card">
+            <div class="instruction-card-header">
+              <span class="card-icon">⚡</span>
+              <h3>3. Two Detection Phases</h3>
+            </div>
+            <p>
+              This simulator checks for problems across both essential phases:
+            </p>
+            <div class="phase-compare-box">
+              <div class="phase-item phase-item-prior">
+                <span class="phase-label">PRIOR TO ALLOCATION:</span>
+                <p>Test a request <em>before</em> giving it to a process to see if it would create an unsafe state.</p>
+              </div>
+              <div class="phase-item phase-item-during">
+                <span class="phase-label">DURING EXECUTION:</span>
+                <p>Detect active circular wait cycles in real-time using graph algorithms.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step-by-Step Practical Tutorial -->
+        <div class="instructions-steps-section">
+          <div class="section-heading-wrap">
+            <span class="section-numeral">§ 2.0</span>
+            <span class="scenario-bar-title">Step-by-Step: How to Interact with the Simulator</span>
+          </div>
+
+          <div class="steps-flow-grid">
+            <div class="step-card">
+              <div class="step-number">STEP 1</div>
+              <h4>Pick a Preset or Click "Random"</h4>
+              <p>
+                Choose <strong>Case I (Safe)</strong>, <strong>Case II (Risk)</strong>, <strong>Case III (Deadlock)</strong>, or the <strong>Random Scenario</strong> button.
+                The graph instantly centers and fits the canvas so everything is visible right away!
+              </p>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">STEP 2</div>
+              <h4>Drag and Move Nodes Freely</h4>
+              <p>
+                Click and drag any Process circle or Resource rectangle with your mouse or finger to move it wherever you like. The dependency arrows will follow smoothly.
+              </p>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">STEP 3</div>
+              <h4>Read the Live Graph Interpretation</h4>
+              <p>
+                Check <strong>Figure 1.1</strong> right below the graph canvas. It describes what is happening in plain English (e.g. <em>"P1 holds R1 and requests an instance to R2"</em>).
+              </p>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">STEP 4</div>
+              <h4>Test a Request Before Granting</h4>
+              <p>
+                In <strong>Experiment 1</strong>, pick a process, choose a resource, and click <strong>"Evaluate Request Safety"</strong>. The system will tell you if granting it is safe or if it triggers a deadlock!
+              </p>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">STEP 5</div>
+              <h4>Edit Numbers in Table 1.0</h4>
+              <p>
+                Want to test your own numbers? Type new values directly into the <strong>Available</strong>, <strong>Allocated</strong>, or <strong>Requested</strong> input boxes in Table 1.0.
+              </p>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">STEP 6</div>
+              <h4>Break Deadlocks with One Click</h4>
+              <p>
+                If a deadlock occurs, click the red <strong>"Preempt Contested Resource"</strong> button. The simulator will take back the contested resource from the optimal victim process and restore safety!
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Summary & Return Button -->
+        <div class="instructions-footer-cta">
+          <div class="cta-text">
+            <strong>Ready to explore?</strong>
+            <span>Jump back to the dashboard and try running cycle detection or generating random scenarios!</span>
+          </div>
+          <button type="button" class="btn btn-primary btn-lg" id="btn-return-simulator">
+            <span>🚀 Return to Simulator Dashboard</span>
+          </button>
+        </div>
+      </section>
+    </div>
   </main>
 
   <!-- Academic Institutional Footer -->
